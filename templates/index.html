@@ -35,7 +35,6 @@
         const startDateInput = document.getElementById('start_date');
         const endDateInput = document.getElementById('end_date');
         const searchResultsSummary = document.getElementById('search-results-summary');
-        // 修复了这里的ID拼写错误：从 'initial-no-no-data-message' 改为 'initial-no-data-message'
         const initialNoDataMessage = document.getElementById('initial-no-data-message'); 
 
         const today = "{{ today_date }}"; // 从后端获取的今天日期字符串
@@ -119,8 +118,8 @@
             const messageTableHtml = renderMessageTable(message, query);
             const summaryText = `
                 <span class="message-card-icon">▶</span>
-                <strong style="margin-right: 10px;">接收时间:</strong> ${highlightText(message.ReceiveTime, query)}
-                <strong style="margin-left: 15px;">消息ID:</strong> ${highlightText(message.ParsedData.MessageId || 'N/A', query)}
+                <strong style="margin-right: 10px;">接收时间:</strong> <strong class="monospace-text">${highlightText(message.ReceiveTime, query)}</strong>
+                <strong style="margin-left: 15px;">消息ID:</strong> <strong class="monospace-text">${highlightText(message.ParsedData.MessageId || 'N/A', query)}</strong>
             `;
 
             return `

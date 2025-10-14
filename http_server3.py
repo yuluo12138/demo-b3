@@ -91,30 +91,28 @@ def parse_hex_content(hex_str):
 
         # 3. 第 10-20 字节: 纬度 (11个字符，ASCII)
         # N/S ddmm.mmmmm
-        if len(byte_data) < offset + 11: raise IndexError("纬度字节不足")
-        lat_full_str = byte_data[offset : offset + 11].decode('ascii', errors='replace')
-        if len(lat_full_str) == 11 and (lat_full_str[0] == 'N' or lat_full_str[0] == 'S'):
+        if len(lat_full_str := byte_data[offset : offset + 11].decode('ascii', errors='replace')) != 11: 
+            raise IndexError("纬度字节不足或解码失败")
+        if lat_full_str[0] in ['N', 'S']:
             parsed_data['纬度半球'] = lat_full_str[0]
-            parsed_data['纬度原始值'] = lat_full_str[1:] # 存储原始值用于后续格式化
+            parsed_data['纬度原始值'] = lat_full_str[1:] 
         else:
-            parsed_data['纬度半球'] = lat_full_str[0] if lat_full_str else ''
-            parsed_data['纬度原始值'] = lat_full_str[1:] if len(lat_full_str) > 1 else lat_full_str
-            if parsed_data['纬度半球'] not in ['N', 'S']:
-                parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "纬度半球格式不正确或长度不足; "
+            parsed_data['纬度半球'] = '' # 空或不正确
+            parsed_data['纬度原始值'] = lat_full_str
+            parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "纬度半球格式不正确或长度不足; "
         offset += 11
 
         # 4. 第 21-32 字节: 经度 (12个字符，ASCII)
         # E/W dddmm.mmmmm
-        if len(byte_data) < offset + 12: raise IndexError("经度字节不足")
-        lon_full_str = byte_data[offset : offset + 12].decode('ascii', errors='replace')
-        if len(lon_full_str) == 12 and (lon_full_str[0] == 'E' or lon_full_str[0] == 'W'):
+        if len(lon_full_str := byte_data[offset : offset + 12].decode('ascii', errors='replace')) != 12:
+            raise IndexError("经度字节不足或解码失败")
+        if lon_full_str[0] in ['E', 'W']:
             parsed_data['经度半球'] = lon_full_str[0]
-            parsed_data['经度原始值'] = lon_full_str[1:] # 存储原始值用于后续格式化
+            parsed_data['经度原始值'] = lon_full_str[1:]
         else:
-            parsed_data['经度半球'] = lon_full_str[0] if lon_full_str else ''
-            parsed_data['经度原始值'] = lon_full_str[1:] if len(lon_full_str) > 1 else lon_full_str
-            if parsed_data['经度半球'] not in ['E', 'W']:
-                parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "经度半球格式不正确或长度不足; "
+            parsed_data['经度半球'] = '' # 空或不正确
+            parsed_data['经度原始值'] = lon_full_str
+            parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "经度半球格式不正确或长度不足; "
         offset += 12
 
         # 5. 第 33-40 字节: 高程 (8个字符，ASCII)

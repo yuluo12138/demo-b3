@@ -232,9 +232,15 @@
         .highlight {
             background-color: #fff3cd; /* Light yellow */
             font-weight: bold;
-            padding: 2px 4px;
-            border-radius: 3px;
             color: #856404; /* Darker yellow-ish text */
+        }
+
+        /* 解决卡片标题高亮时字间距不均匀的问题 */
+        /* 针对包含接收时间和消息ID的强标签，强制使用等宽字体 */
+        .message-card summary strong.monospace-text {
+            font-family: 'Consolas', 'Menlo', 'Monaco', 'Lucida Console', monospace;
+            white-space: pre; /* 保留内部的空白，防止意外折叠 */
+            /* letter-spacing: normal; 确保没有额外的字符间距调整 */
         }
 
         .id-link {

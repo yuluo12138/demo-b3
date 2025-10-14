@@ -14,14 +14,14 @@
                 <details open> {# 默认打开 #}
                     <summary>
                         <span class="message-card-icon">▶</span> {# 初始图标为右箭头 #}
-                        接收时间: {{ msg.ReceiveTime }}
-                        <strong style="margin-left: 15px;">消息ID:</strong> {{ msg.ParsedData.MessageId | default('N/A') }}
+                        接收时间: <strong class="monospace-text">{{ msg.ReceiveTime }}</strong>
+                        <strong style="margin-left: 15px;">消息ID:</strong> <strong class="monospace-text">{{ msg.ParsedData.MessageId | default('N/A') }}</strong>
                     </summary>
                     <div class="card-content">
                         <table>
                             <tr>
+                                {# 不在表格中显示这些内部搜索字段，但最新接收时间在历史页面作为表格字段显示 #}
                                 {% for key in msg.ParsedData.keys() %}
-                                    {# 不在表格中显示这些内部搜索字段，但最新接收时间在历史页面作为表格字段显示 #}
                                     {% if key not in ['IdNumber', 'MessageId', 'NetworkMode', '自定义数据_原始Hex', '纬度半球', '纬度原始值', '经度半球', '经度原始值', '隔离符'] %} 
                                         <th>{{ key }}</th>
                                     {% endif %}
