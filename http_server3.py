@@ -1,9 +1,13 @@
 import json
 import datetime
-import uuid # 用于生成 RequestId
+import uuid
+import os # 导入os模块用于文件路径操作
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 
 app = Flask(__name__)
+
+# --- 数据持久化配置 ---
+DATA_FILE = 'data_store.json' # 存储数据的文件名，将在应用根目录生成
 
 # 全局数据存储
 # 结构:
@@ -11,25 +15,43 @@ app = Flask(__name__)
 #     "IdNumber1": [
 #         {
 #             "raw_post_data": {...},
-#             "parsed_content": {
-#                 "定位时间": "...",
-#                 "纬度半球": "...", # N/S
-#                 "纬度": "...", # ddmm.mmmmm
-#                 "经度半球": "...", # E/W
-#                 "经度": "...", # dddmm.mmmmm
-#                 "高程": "...", # +-ddddd.d
-#                 "隔离符": "-",
-#                 "自定义数据_原始Hex": "...", # 原始自定义数据的十六进制
-#                 "自定义数据": "...", # 尝试解码后的自定义数据
-#                 "parse_error": "..." # 解析错误信息
-#             },
-#             "receive_time": "..." # 服务器接收时间
+#             "parsed_content": { ... },
+#             "receive_time": "..."
 #         },
 #         ...
 #     ],
 #     "IdNumber2": [...]
 # }
 DATA_STORE = {}
+
+# --- 数据持久化辅助函数 ---
+def load_data():
+    """从文件中加载数据到DATA_STORE"""
+    global DATA_STORE
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                DATA_STORE = json.load(f)
+            print(f"数据已从 {DATA_FILE} 加载。")
+        except json.JSONDecodeError as e:
+            print(f"警告: {DATA_FILE} 文件内容损坏，无法解析JSON: {e}。将初始化为空数据存储。")
+            DATA_STORE = {}
+        except Exception as e:
+            print(f"加载数据时发生未知错误: {e}。将初始化为空数据存储。")
+            DATA_STORE = {}
+    else:
+        print(f"数据文件 {DATA_FILE} 不存在，将初始化为空数据存储。")
+        DATA_STORE = {}
+
+def save_data():
+    """将DATA_STORE中的数据保存到文件"""
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            # ensure_ascii=False 确保中文字符以原始形式写入，而非转义序列
+            json.dump(DATA_STORE, f, indent=2, ensure_ascii=False)
+        print(f"数据已保存到 {DATA_FILE}。")
+    except Exception as e:
+        print(f"保存数据到 {DATA_FILE} 时发生错误: {e}")
 
 # --- 辅助函数：解析电文十六进制字符串 ---
 def parse_hex_content(hex_str):
@@ -53,7 +75,6 @@ def parse_hex_content(hex_str):
         offset = 0
 
         # 1. 第1字节: 数据标识 (0xA4)
-        # byte_data[offset] # 已检查
         offset += 1
 
         # 2. 第 2-9 字节: 定位时间 (8个字符，ASCII)
@@ -81,20 +102,18 @@ def parse_hex_content(hex_str):
         parsed_data['隔离符'] = separator_bytes.decode('ascii', errors='replace') if separator_bytes else ''
         offset += 1
         if parsed_data['隔离符'] != '-':
-             # 隔离符不正确，但仍尝试解析后续自定义数据，添加警告
             parsed_data['parse_warning'] = "隔离符不为 '-'，可能影响自定义数据解析。"
 
         # 7. 自定义数据 (N个字符)
-        # 汉字内容为计算机内码 (GBK), 代码内容为ASCII码字符
         custom_data_bytes = byte_data[offset:]
         parsed_data['自定义数据_原始Hex'] = custom_data_bytes.hex().upper()
         
         if custom_data_bytes:
             try:
-                # 优先尝试GBK解码，因为文档提到汉字是GBK，且GBK支持全角字符
+                # 优先尝试GBK解码，errors='replace'处理无法解码的字符
                 parsed_data['自定义数据'] = custom_data_bytes.decode('gbk', errors='replace')
             except Exception:
-                # 如果GBK失败，尝试UTF-8（虽然文档没提，但也是常见备选）
+                # 尝试UTF-8解码
                 try:
                     parsed_data['自定义数据'] = custom_data_bytes.decode('utf-8', errors='replace')
                 except Exception:
@@ -115,7 +134,6 @@ def parse_hex_content(hex_str):
 # --- API 路由：接收POST数据 ---
 @app.route('/api/receive', methods=['POST'])
 def receive_post_data():
-    # 从请求头获取 RequestId，如果没有则生成一个
     request_id = request.headers.get('RequestId', str(uuid.uuid4()))
     content_type = request.headers.get('Content-Type')
 
@@ -133,7 +151,6 @@ def receive_post_data():
         if not data:
             raise ValueError("Invalid or empty JSON data")
     except Exception as e:
-        # 这里捕获JSON解析错误，包括全角字符导致的错误
         return jsonify({
             "RequestId": request_id,
             "Code": "error",
@@ -165,8 +182,11 @@ def receive_post_data():
         "parsed_content": parsed_content,
         "receive_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
+    
+    # 6. 保存数据到文件 (每次更新后保存)
+    save_data()
 
-    # 6. 返回成功响应
+    # 7. 返回成功响应
     return jsonify({
         "RequestId": request_id,
         "Code": "ok"
@@ -179,13 +199,12 @@ def index():
     for id_num, messages in DATA_STORE.items():
         if messages:
             latest_message = messages[-1] # 获取最新一条
-            # 格式化数据以在模板中显示
             display_data = format_parsed_data(latest_message["parsed_content"])
             latest_data_per_id.append({
                 "IdNumber": id_num,
                 "ReceiveTime": latest_message["receive_time"],
                 "ParsedData": display_data,
-                "RawPostData": json.dumps(latest_message["raw_post_data"], indent=2, ensure_ascii=False) # 格式化并转为字符串
+                "RawPostData": json.dumps(latest_message["raw_post_data"], indent=2, ensure_ascii=False)
             })
     
     # 按接收时间倒序排序，最新的显示在最前面
@@ -197,21 +216,20 @@ def index():
 @app.route('/history/<string:id_number>')
 def history(id_number):
     if id_number not in DATA_STORE:
-        return render_template('not_found.html', id_number=id_number), 404 # 使用通用404模板
+        return render_template('not_found.html', id_number=id_number), 404
 
-    historical_messages = []
-    # 历史数据按时间顺序排列
-    for message in DATA_STORE[id_number]:
+    historical_messages_formatted = []
+    # 历史数据按接收时间倒序排列，最新的在前面
+    # 由于存储时是追加，所以 DATA_STORE[id_number] 是按时间顺序的，我们需要反转它
+    for message in reversed(DATA_STORE[id_number]): # 反转列表以显示最新在顶部
         display_data = format_parsed_data(message["parsed_content"])
-        historical_messages.append({
+        historical_messages_formatted.append({
             "ReceiveTime": message["receive_time"],
             "ParsedData": display_data,
             "RawPostData": json.dumps(message["raw_post_data"], indent=2, ensure_ascii=False)
         })
-    # 最新消息在最上面
-    historical_messages.reverse() 
 
-    return render_template('history.html', id_number=id_number, historical_messages=historical_messages)
+    return render_template('history.html', id_number=id_number, historical_messages=historical_messages_formatted)
 
 
 # --- 辅助函数：格式化解析后的数据用于显示 ---
@@ -219,7 +237,7 @@ def format_parsed_data(parsed_data):
     formatted = {}
     if 'parse_error' in parsed_data:
         formatted['状态'] = f"<span class='error-message'>解析错误: {parsed_data['parse_error']}</span>"
-        return formatted # 如果有严重解析错误，只显示错误
+        return formatted
 
     formatted['状态'] = "<span class='success-message'>解析成功</span>"
     if 'parse_warning' in parsed_data:
@@ -227,7 +245,7 @@ def format_parsed_data(parsed_data):
 
     for key, value in parsed_data.items():
         if key in ['parse_error', 'parse_warning', '自定义数据_原始Hex']:
-            continue # 不在表格中直接显示这些内部字段
+            continue
         
         display_value = value
         if key == '纬度半球':
@@ -235,13 +253,15 @@ def format_parsed_data(parsed_data):
         elif key == '经度半球':
             display_value = '东经' if value == 'E' else ('西经' if value == 'W' else value)
         
-        # 对于自定义数据，如果解析有问题，直接显示原始Hex和警告
-        if key == '自定义数据' and str(value).startswith('无法解码'): # str() to handle potential non-string 'value'
+        if key == '自定义数据' and str(value).startswith('无法解码'):
             formatted[key] = f"<span class='warning-message'>{value} (原始Hex: {parsed_data.get('自定义数据_原始Hex', 'N/A')})</span>"
         else:
             formatted[key] = display_value
     
     return formatted
+
+# --- 应用启动时加载数据 ---
+load_data()
 
 # --- 运行应用 ---
 if __name__ == '__main__':
