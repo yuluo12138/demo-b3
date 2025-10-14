@@ -1,7 +1,7 @@
 import json
 import datetime
 import uuid
-import os # 导入os模块用于文件路径操作
+import os
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 
 app = Flask(__name__)
@@ -82,15 +82,30 @@ def parse_hex_content(hex_str):
         offset += 8
 
         # 3. 第 10-20 字节: 纬度 (11个字符，ASCII)
-        lat_str = byte_data[offset : offset + 11].decode('ascii', errors='replace')
-        parsed_data['纬度半球'] = lat_str[0] if lat_str else ''
-        parsed_data['纬度'] = lat_str[1:] if len(lat_str) > 1 else ''
+        # N/S ddmm.mmmmm
+        lat_full_str = byte_data[offset : offset + 11].decode('ascii', errors='replace')
+        if len(lat_full_str) == 11 and (lat_full_str[0] == 'N' or lat_full_str[0] == 'S'):
+            parsed_data['纬度半球'] = lat_full_str[0]
+            parsed_data['纬度原始值'] = lat_full_str[1:] # 存储原始值用于后续格式化
+        else:
+            parsed_data['纬度半球'] = lat_full_str[0] if lat_full_str else ''
+            parsed_data['纬度原始值'] = lat_full_str[1:] if len(lat_full_str) > 1 else lat_full_str
+            if parsed_data['纬度半球'] not in ['N', 'S']:
+                parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "纬度半球格式不正确; "
+
         offset += 11
 
         # 4. 第 21-32 字节: 经度 (12个字符，ASCII)
-        lon_str = byte_data[offset : offset + 12].decode('ascii', errors='replace')
-        parsed_data['经度半球'] = lon_str[0] if lon_str else ''
-        parsed_data['经度'] = lon_str[1:] if len(lon_str) > 1 else ''
+        # E/W dddmm.mmmmm
+        lon_full_str = byte_data[offset : offset + 12].decode('ascii', errors='replace')
+        if len(lon_full_str) == 12 and (lon_full_str[0] == 'E' or lon_full_str[0] == 'W'):
+            parsed_data['经度半球'] = lon_full_str[0]
+            parsed_data['经度原始值'] = lon_full_str[1:] # 存储原始值用于后续格式化
+        else:
+            parsed_data['经度半球'] = lon_full_str[0] if lon_full_str else ''
+            parsed_data['经度原始值'] = lon_full_str[1:] if len(lon_full_str) > 1 else lon_full_str
+            if parsed_data['经度半球'] not in ['E', 'W']:
+                parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "经度半球格式不正确; "
         offset += 12
 
         # 5. 第 33-40 字节: 高程 (8个字符，ASCII)
@@ -102,7 +117,7 @@ def parse_hex_content(hex_str):
         parsed_data['隔离符'] = separator_bytes.decode('ascii', errors='replace') if separator_bytes else ''
         offset += 1
         if parsed_data['隔离符'] != '-':
-            parsed_data['parse_warning'] = "隔离符不为 '-'，可能影响自定义数据解析。"
+            parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "隔离符不为 '-'，可能影响自定义数据解析。"
 
         # 7. 自定义数据 (N个字符)
         custom_data_bytes = byte_data[offset:]
@@ -244,20 +259,54 @@ def format_parsed_data(parsed_data):
         formatted['状态'] += f" <span class='warning-message'>警告: {parsed_data['parse_warning']}</span>"
 
     for key, value in parsed_data.items():
-        if key in ['parse_error', 'parse_warning', '自定义数据_原始Hex']:
-            continue
+        if key in ['parse_error', 'parse_warning', '自定义数据_原始Hex', '纬度原始值', '经度原始值']:
+            continue # 不在表格中直接显示这些内部字段
         
         display_value = value
-        if key == '纬度半球':
-            display_value = '北纬' if value == 'N' else ('南纬' if value == 'S' else value)
-        elif key == '经度半球':
-            display_value = '东经' if value == 'E' else ('西经' if value == 'W' else value)
         
+        # 格式化纬度显示
+        if key == '纬度半球':
+            hemisphere = '北纬' if value == 'N' else ('南纬' if value == 'S' else value)
+            lat_raw = parsed_data.get('纬度原始值', '')
+            if len(lat_raw) >= 2 and '.' in lat_raw: # 确保至少有度分格式
+                try:
+                    degrees = lat_raw[0:2]
+                    minutes = lat_raw[2:]
+                    formatted['纬度'] = f"{hemisphere}{degrees}°{minutes}'" # <-- 更改为 ° 和 '
+                except Exception:
+                    formatted['纬度'] = f"{hemisphere}{lat_raw} (格式错误)"
+            else:
+                formatted['纬度'] = f"{hemisphere}{lat_raw}"
+            continue # 已处理并在'纬度'键下显示，不再单独显示'纬度半球'
+        
+        # 格式化经度显示
+        if key == '经度半球':
+            hemisphere = '东经' if value == 'E' else ('西经' if value == 'W' else value)
+            lon_raw = parsed_data.get('经度原始值', '')
+            if len(lon_raw) >= 3 and '.' in lon_raw: # 确保至少有度分格式
+                try:
+                    degrees = lon_raw[0:3]
+                    minutes = lon_raw[3:]
+                    formatted['经度'] = f"{hemisphere}{degrees}°{minutes}'" # <-- 更改为 ° 和 '
+                except Exception:
+                    formatted['经度'] = f"{hemisphere}{lon_raw} (格式错误)"
+            else:
+                formatted['经度'] = f"{hemisphere}{lon_raw}"
+            continue # 已处理并在'经度'键下显示，不再单独显示'经度半球'
+
         if key == '自定义数据' and str(value).startswith('无法解码'):
             formatted[key] = f"<span class='warning-message'>{value} (原始Hex: {parsed_data.get('自定义数据_原始Hex', 'N/A')})</span>"
         else:
             formatted[key] = display_value
     
+    # 确保经纬度始终在解析成功时出现，即使原始值不完全符合预期
+    # 这些是兜底，如果上述格式化失败，会显示原始值
+    if '纬度' not in formatted:
+        formatted['纬度'] = parsed_data.get('纬度半球', '') + parsed_data.get('纬度原始值', '')
+    if '经度' not in formatted:
+        formatted['经度'] = parsed_data.get('经度半球', '') + parsed_data.get('经度原始值', '')
+
+
     return formatted
 
 # --- 应用启动时加载数据 ---
