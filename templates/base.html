@@ -43,66 +43,152 @@
             background-color: #0056b3;
         }
 
-        /* Card Styles */
-        .message-card {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
-        }
-        .message-card details {
-            padding: 0; /* Remove default padding for details */
-        }
-        .message-card summary {
+        /* Search Form Styles */
+        .search-form {
+            background-color: #f8f9fa;
+            border: 1px solid #e2e6ea;
             padding: 15px 20px;
-            background-color: #e9f7fd;
-            border-bottom: 1px solid #d1ecf1;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+            display: flex; /* Flexbox for alignment */
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            gap: 15px; /* Spacing between items */
+            align-items: center;
+        }
+        .search-form label {
+            font-weight: bold;
+            color: #555;
+            white-space: nowrap; /* Prevent label from wrapping */
+        }
+        .search-form input[type="text"],
+        .search-form input[type="date"] {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.9em;
+            flex-grow: 1; /* Allow inputs to grow */
+            min-width: 120px; /* Minimum width for inputs */
+        }
+        /* No search button needed for real-time search */
+
+
+        /* Message Group Card (for IdNumber grouping) */
+        .id-group-card {
+            background-color: #ffffff;
+            border: 1px solid #cceeff; /* Light blue border */
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+        .id-group-card details {
+            padding: 0;
+        }
+        .id-group-card summary {
+            padding: 18px 25px;
+            background-color: #e6f7ff; /* Lighter blue background */
+            border-bottom: 1px solid #a0d9ff;
             cursor: pointer;
             font-weight: bold;
             color: #0056b3;
-            outline: none; /* Remove focus outline */
+            outline: none;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-radius: 8px 8px 0 0;
-            font-size: 1.1em;
+            font-size: 1.2em;
         }
-        .message-card summary:hover {
-            background-color: #dff2f8;
+        .id-group-card summary:hover {
+            background-color: #bae7ff;
         }
-        .message-card summary::-webkit-details-marker {
-            display: none; /* Hide default marker */
+        .id-group-card summary::-webkit-details-marker {
+            display: none;
         }
-        .message-card summary::before {
-            content: '▶'; /* Custom marker */
+        .id-group-summary-icon { /* Custom icon for ID groups */
             margin-right: 10px;
+            display: inline-block;
+            width: 1.2em;
+            text-align: center;
             transition: transform 0.2s;
+            font-family: monospace; /* 为了符号显示一致 */
+            font-weight: normal; /* 不加粗符号本身 */
+            color: #0056b3; /* 符号颜色与文本一致 */
         }
-        .message-card details[open] summary::before {
-            content: '▼';
+        .id-group-card details[open] .id-group-summary-icon {
+            transform: rotate(90deg);
+        }
+        .id-group-card details[open] summary {
+            border-radius: 8px 8px 0 0;
+        }
+        .id-group-content {
+            padding: 15px 20px; /* Padding for the container of individual message cards */
+        }
+
+        /* Individual Message Card Styles (inside ID group) */
+        .message-card {
+            background-color: #fcfdff; /* Even lighter background */
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 15px; /* Spacing between individual message cards */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-top: 10px; /* Spacing from ID group summary */
+        }
+        .message-card:first-of-type {
+            margin-top: 0; /* Remove top margin for the first message card in a group */
+        }
+        .message-card details {
+            padding: 0;
+        }
+        .message-card summary {
+            padding: 12px 18px;
+            background-color: #f1f8fc; /* Lightest blue for individual card summary */
+            border-bottom: 1px solid #d1ecf1;
+            cursor: pointer; /* Individual message card summary now also clickable for folding */
+            font-weight: normal; /* Less bold than ID group summary */
+            color: #007bff;
+            outline: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 6px 6px 0 0;
+            font-size: 1em;
+        }
+        /* 默认的 details 展开/折叠箭头 */
+        .message-card summary::-webkit-details-marker {
+            display: none;
+        }
+        .message-card-icon { /* Custom icon for individual message cards */
+            margin-right: 10px;
+            display: inline-block;
+            width: 1em;
+            text-align: center;
+            transition: transform 0.2s;
+            font-family: monospace;
+            font-weight: normal;
+            color: #007bff;
+        }
+        .message-card details[open] .message-card-icon {
             transform: rotate(90deg);
         }
         .message-card details[open] summary {
-            border-bottom: 1px solid #d1ecf1; /* Add border when open */
-            border-radius: 8px 8px 0 0;
+            border-radius: 6px 6px 0 0;
         }
 
         .card-content {
-            padding: 20px;
+            padding: 15px 18px; /* Padding for individual message card content */
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
-            margin-bottom: 15px;
+            margin-top: 10px;
+            margin-bottom: 10px;
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 10px;
+            padding: 8px;
             text-align: left;
-            font-size: 0.95em;
+            font-size: 0.9em;
         }
         th {
             background-color: #f1f8fc;
@@ -119,15 +205,16 @@
         pre {
             background-color: #f8f8f8;
             border: 1px solid #ddd;
-            padding: 15px;
+            padding: 12px;
             border-radius: 5px;
             overflow-x: auto;
             font-family: monospace;
             white-space: pre-wrap; /* Wrap long lines */
             word-wrap: break-word; /* Break words for very long strings */
-            font-size: 0.85em;
+            font-size: 0.8em;
         }
         
+        /* Message Status Colors */
         .error-message {
             color: #dc3545; /* Bootstrap red */
             font-weight: bold;
@@ -141,11 +228,21 @@
             font-weight: bold;
         }
         
+        /* Highlight Style */
+        .highlight {
+            background-color: #fff3cd; /* Light yellow */
+            font-weight: bold;
+            padding: 2px 4px;
+            border-radius: 3px;
+            color: #856404; /* Darker yellow-ish text */
+        }
+
         .id-link {
             font-size: 0.9em;
             color: #007bff;
             text-decoration: none;
             margin-left: 15px;
+            pointer-events: auto; /* 确保链接可点击 */
         }
         .id-link:hover {
             text-decoration: underline;

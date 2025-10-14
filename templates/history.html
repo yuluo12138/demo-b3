@@ -12,17 +12,33 @@
         {% for msg in historical_messages %}
             <div class="message-card">
                 <details open> {# 默认打开 #}
-                    <summary>接收时间: {{ msg.ReceiveTime }}</summary>
+                    <summary>
+                        <span class="message-card-icon">▶</span> {# 初始图标为右箭头 #}
+                        接收时间: {{ msg.ReceiveTime }}
+                        <strong style="margin-left: 15px;">消息ID:</strong> {{ msg.ParsedData.MessageId | default('N/A') }}
+                    </summary>
                     <div class="card-content">
                         <table>
                             <tr>
                                 {% for key in msg.ParsedData.keys() %}
-                                    <th>{{ key }}</th>
+                                    {# 不在表格中显示这些内部搜索字段，但最新接收时间在历史页面作为表格字段显示 #}
+                                    {% if key not in ['IdNumber', 'MessageId', 'NetworkMode', '自定义数据_原始Hex', '纬度半球', '纬度原始值', '经度半球', '经度原始值', '隔离符'] %} 
+                                        <th>{{ key }}</th>
+                                    {% endif %}
                                 {% endfor %}
                             </tr>
                             <tr>
                                 {% for key, value in msg.ParsedData.items() %}
-                                    <td>{{ value | safe }}</td>
+                                    {% if key not in ['IdNumber', 'MessageId', 'NetworkMode', '自定义数据_原始Hex', '纬度半球', '纬度原始值', '经度半球', '经度原始值', '隔离符'] %}
+                                        <td>
+                                            {% if key == '状态' %}
+                                                {% if '解析错误' in value %}<span class='error-message'>{{ value }}</span>
+                                                {% elif '警告' in value %}<span class='warning-message'>{{ value }}</span>
+                                                {% else %}<span class='success-message'>{{ value }}</span>{% endif %}
+                                            {% elif key == '自定义数据' and '无法解码' in value %}<span class='warning-message'>{{ value }}</span>
+                                            {% else %}{{ value }}{% endif %}
+                                        </td>
+                                    {% endif %}
                                 {% endfor %}
                             </tr>
                         </table>
@@ -37,4 +53,20 @@
     {% else %}
         <p>ID '{{ id_number }}' 没有任何历史数据。</p>
     {% endif %}
+
+    <script>
+        // 为历史页面的消息卡片添加折叠图标逻辑
+        document.querySelectorAll('.message-card details').forEach(detailsElem => {
+            const icon = detailsElem.querySelector('.message-card-icon');
+            if (icon) {
+                // 初始状态根据 details[open] 来设置图标
+                icon.textContent = detailsElem.open ? '▼' : '▶'; 
+            }
+            detailsElem.addEventListener('toggle', () => {
+                if (icon) {
+                    icon.textContent = detailsElem.open ? '▼' : '▶';
+                }
+            });
+        });
+    </script>
 {% endblock %}
