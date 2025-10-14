@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}所有ID的最新数据{% endblock %}
+
+{% block content %}
+    <h1>所有ID的最新数据</h1>
+
+    {% if all_latest_messages %}
+        {% for msg in all_latest_messages %}
+            <div class="message-card">
+                <details open> {# 默认打开 #}
+                    <summary>
+                        <span>卡号 ID: <strong>{{ msg.IdNumber }}</strong> - 接收时间: {{ msg.ReceiveTime }}</span>
+                        <a href="{{ url_for('history', id_number=msg.IdNumber) }}" class="id-link">查看历史记录 &raquo;</a>
+                    </summary>
+                    <div class="card-content">
+                        <table>
+                            <tr>
+                                {% for key in msg.ParsedData.keys() %}
+                                    <th>{{ key }}</th>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                {% for key, value in msg.ParsedData.items() %}
+                                    <td>{{ value | safe }}</td>
+                                {% endfor %}
+                            </tr>
+                        </table>
+                        <details>
+                            <summary>查看原始POST数据</summary>
+                            <pre>{{ msg.RawPostData }}</pre>
+                        </details>
+                    </div>
+                </details>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>目前没有接收到任何数据。请尝试发送POST请求。</p>
+    {% endif %}
+{% endblock %}

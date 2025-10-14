@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}未找到数据{% endblock %}
+
+{% block content %}
+    <h1>未找到数据</h1>
+    <p>抱歉，没有找到卡号 ID 为 '<strong>{{ id_number }}</strong>' 的历史数据。</p>
+    <div class="nav-links">
+        <a href="{{ url_for('index') }}">返回首页</a>
+    </div>
+{% endblock %}

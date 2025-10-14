@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}ID {{ id_number }} 的历史数据{% endblock %}
+
+{% block content %}
+    <div class="nav-links">
+        <a href="{{ url_for('index') }}">返回首页</a>
+    </div>
+    <h1>卡号 ID: <strong>{{ id_number }}</strong> 的历史数据</h1>
+
+    {% if historical_messages %}
+        {% for msg in historical_messages %}
+            <div class="message-card">
+                <details open> {# 默认打开 #}
+                    <summary>接收时间: {{ msg.ReceiveTime }}</summary>
+                    <div class="card-content">
+                        <table>
+                            <tr>
+                                {% for key in msg.ParsedData.keys() %}
+                                    <th>{{ key }}</th>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                {% for key, value in msg.ParsedData.items() %}
+                                    <td>{{ value | safe }}</td>
+                                {% endfor %}
+                            </tr>
+                        </table>
+                        <details>
+                            <summary>查看原始POST数据</summary>
+                            <pre>{{ msg.RawPostData }}</pre>
+                        </details>
+                    </div>
+                </details>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>ID '{{ id_number }}' 没有任何历史数据。</p>
+    {% endif %}
+{% endblock %}
