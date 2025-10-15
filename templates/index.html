@@ -11,11 +11,10 @@
                placeholder="最新接收时间, ID, 纬度, 经度, 海拔高, 中文备注, 标识信息, 消息ID, 网络模式, 定位时间">
 
         <label for="start_date">起始日期:</label>
-        <input type="date" id="start_date" name="start_date"> {# 移除 value="{{ today_date }}" #}
+        <input type="date" id="start_date" name="start_date">
 
         <label for="end_date">结束日期:</label>
-        <input type="date" id="end_date" name="end_date"> {# 移除 value="{{ today_date }}" #}
-        {# 实时搜索不需要提交按钮 #}
+        <input type="date" id="end_date" name="end_date">
     </div>
 
     {# 搜索结果摘要标题，由JS控制显示 #}
@@ -28,8 +27,8 @@
 
     <script>
         // 从 Flask 后端获取所有数据，存储为 JavaScript 变量
-        // allMessagesGrouped 是一个对象，键是 IdNumber，值是该IdNumber下的所有消息数组 (按时间倒序)
         const allMessagesGrouped = {{ all_messages_grouped_json | safe }}; 
+        const idMessageCounts = {{ id_message_counts_json | safe }}; // 每个ID的总消息数
         const messagesContainer = document.getElementById('messages-container');
         const searchQueryInput = document.getElementById('search_query');
         const startDateInput = document.getElementById('start_date');
@@ -42,14 +41,13 @@
 
         // 定义可搜索的字段 (需要与Python后端 format_parsed_data_for_display 中的键一致)
         const searchableKeys = [
-            '最新接收时间', 'IdNumber', '纬度', '经度', '高程', '中文备注', '标识信息', 'MessageId', 'NetworkMode', '定位时间'
+            '最新接收时间', 'IdNumber', '纬度', '经度', '高程', '中文备注', '标识信息', 'MessageId', 'DeliveryCount', 'NetworkMode', '定位时间'
         ];
         
         // 辅助函数：将纯文本转换为包含高亮标签的HTML
         function highlightText(text, query) {
             if (!query) return text;
             const lowerText = String(text).toLowerCase();
-            const lowerQuery = query.toLowerCase();
             
             const parts = [];
             let lastIndex = 0;
@@ -75,7 +73,7 @@
         function renderMessageTable(message, query) {
             let parsedDataHtml = '';
             // 定义显示顺序
-            const orderedKeys = ['状态', '最新接收时间', '定位时间', '纬度', '经度', '高程', '中文备注', '标识信息', 'MessageId', 'NetworkMode'];
+            const orderedKeys = ['状态', '最新接收时间', '定位时间', '纬度', '经度', '高程', '中文备注', '标识信息', 'MessageId', 'DeliveryCount', 'NetworkMode'];
             let displayedKeys = [];
 
             // 优先按照 predefined order 来添加键
@@ -257,7 +255,7 @@
                         <details open>
                             <summary>
                                 <span class="id-group-summary-icon">▶</span>
-                                <span>卡号 ID: <strong>${highlightText(idNum, query)}</strong></span>
+                                <span>卡号 ID: <strong>${highlightText(idNum, query)}</strong> (共 ${idMessageCounts[idNum]} 条消息)</span>
                                 <a href="/history/${encodeURIComponent(idNum)}" class="id-link">查看该ID所有历史记录 &raquo;</a>
                             </summary>
                             <div class="id-group-content">

@@ -140,12 +140,10 @@ def parse_hex_content(hex_str):
             # 优先尝试作为GBK解码，如果有剩余字节再尝试作为ASCII解码标识信息
             custom_data_len = len(custom_data_bytes)
             
-            # 假设中文备注是GBK编码，每个汉字2字节
-            # 尝试各种可能的GBK长度 (2字节倍数)
+            # 迭代尝试从头开始解析GBK，每次增加2个字节
             decoded_gbk = ''
             gbk_bytes_consumed = 0
             
-            # 迭代尝试从头开始解析GBK，每次增加2个字节
             for i in range(0, custom_data_len, 2):
                 try:
                     # 尝试解码从开始到当前位置的偶数字节
@@ -154,13 +152,13 @@ def parse_hex_content(hex_str):
                     gbk_bytes_consumed = i + 2
                 except UnicodeDecodeError:
                     break # 遇到解码失败，停止尝试
-                except Exception: # 捕获其他可能的异常
+                except Exception: # 捕获其他可能的异常 (如字节不足以形成完整字符)
                     break
 
             if decoded_gbk:
                 parsed_data['中文备注'] = decoded_gbk
                 parsed_data['中文备注_原始Hex'] = custom_data_bytes[:gbk_bytes_consumed].hex().upper()
-                remaining_bytes = custom_data_bytes[gbk_bytes_consumed:]
+                remaining_bytes = custom_data_bytes[gbb_bytes_consumed:]
                 
                 if remaining_bytes:
                     # 剩余的字节尝试作为ASCII解码标识信息
@@ -270,6 +268,7 @@ def format_parsed_data_for_display(parsed_data, raw_post_data, id_number, receiv
     # 将原始POST数据中的一些关键字段也添加到格式化数据中，方便搜索
     formatted['IdNumber'] = id_number # 使用传入的IdNumber
     formatted['MessageId'] = raw_post_data.get('MessageId', 'N/A')
+    formatted['DeliveryCount'] = raw_post_data.get('DeliveryCount', 'N/A') # 添加交付次数
     formatted['NetworkMode'] = raw_post_data.get('NetworkMode', 'N/A')
     
     return formatted
@@ -342,13 +341,11 @@ def receive_post_data():
 # --- Web 路由：显示数据 (现在将所有数据传给前端，由前端处理搜索和渲染) ---
 @app.route('/')
 def index():
-    # 获取默认的今天日期字符串用于前端 (此处不需要了，日期默认为空)
-    # today = datetime.date.today().strftime("%Y-%m-%d")
-
     # 准备所有数据，按IdNumber分组，每组内按时间倒序
     all_messages_grouped_for_frontend = {}
     total_messages_count = 0 # 统计所有消息的总条数
     unique_id_count = 0 # 统计唯一IdNumber的数量
+    id_message_counts = {} # 存储每个ID的消息总数
 
     sorted_id_numbers = sorted(DATA_STORE.keys()) # 按IdNumber字母顺序排序
 
@@ -356,6 +353,7 @@ def index():
         messages_for_id = []
         if id_num in DATA_STORE:
             unique_id_count += 1
+            id_message_counts[id_num] = len(DATA_STORE[id_num]) # 记录该ID的总消息数
             # DATA_STORE[id_num] 已经是按时间倒序的
             for message in DATA_STORE[id_num]:
                 total_messages_count += 1
@@ -376,7 +374,8 @@ def index():
     return render_template('index.html', 
                            all_messages_grouped_json=json.dumps(all_messages_grouped_for_frontend, ensure_ascii=False),
                            unique_id_count=unique_id_count, # 传递给前端
-                           total_messages_count=total_messages_count)
+                           total_messages_count=total_messages_count, # 传递给前端
+                           id_message_counts_json=json.dumps(id_message_counts)) # 每个ID的消息总数
 
 # --- Web 路由：显示历史数据 ---
 @app.route('/history/<string:id_number>')
