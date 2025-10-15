@@ -138,7 +138,7 @@
             // 判断是否处于搜索模式
             const isSearching = !!query || !!startDateStr || !!endDateStr; 
             
-            let totalFilteredMessagesCount = 0; // 实际显示的卡片数量
+            let totalFilteredMessagesCount = 0; // 实际显示的卡片数量 (搜索模式下为匹配数，非搜索模式下为所有历史总数)
             let displayedIdNumbers = new Set(); 
             let htmlOutput = '';
 
@@ -179,11 +179,11 @@
                                 false           // isHistoryView: false (主页)
                             );
                             idGroupHasMatchedMessages = true;
-                            totalFilteredMessagesCount++;
+                            totalFilteredMessagesCount++; // 搜索模式下，只统计匹配的消息
                         }
                     }
                 } else {
-                    // 非搜索模式：只显示最新一条消息
+                    // 非搜索模式：只显示最新一条消息，但计算所有历史消息总数
                     const latestMsg = messagesForId[0]; // 消息已按时间倒序排列，第一个就是最新
                     if (latestMsg) {
                         messagesHtmlForCurrentIdGroup += createMessageCardHtml(
@@ -194,8 +194,9 @@
                             false           // isHistoryView: false (主页)
                         );
                         idGroupHasMatchedMessages = true;
-                        totalFilteredMessagesCount++;
                     }
+                    // 在非搜索模式下，无论是否显示最新一条，都将当前ID的所有历史消息数量累加到总数中
+                    totalFilteredMessagesCount += messagesForId.length; 
                 }
 
                 // 如果该 ID 下有匹配的消息（或非搜索模式下的最新消息），则添加 ID 分组
@@ -225,7 +226,8 @@
 
             messagesContainer.innerHTML = htmlOutput;
 
-            if (totalFilteredMessagesCount === 0) {
+            // 只有在搜索模式且没有找到结果时，才显示"未找到匹配数据"
+            if (totalFilteredMessagesCount === 0 && isSearching) { 
                 noSearchResultsDiv.style.display = 'block';
             } else {
                 noSearchResultsDiv.style.display = 'none';
