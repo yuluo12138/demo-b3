@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}未找到数据{% endblock %}
+{% block page_title %}未找到数据{% endblock %}
 
 {% block content %}
-    <h1>未找到数据</h1>
-    <p>抱歉，没有找到卡号 ID 为 '<strong>{{ id_number }}</strong>' 的历史数据。</p>
-    <div class="nav-links">
-        <a href="{{ url_for('index') }}">返回首页</a>
+    <div class="no-data-message">
+        <p>抱歉，未找到 ID 为 '{{ id_number if id_number else "N/A" }}' 的数据，或者您访问的页面不存在。</p>
+        <div class="button-group">
+            <a href="{{ url_for('index') }}" class="button">返回首页</a>
+        </div>
     </div>
 {% endblock %}
