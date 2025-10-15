@@ -2,7 +2,7 @@ import json
 import datetime
 import uuid
 import os
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template
 from urllib.parse import quote_plus # 用于URL编码，在前端链接中使用
 
 app = Flask(__name__)
@@ -91,9 +91,9 @@ def parse_hex_content(hex_str):
 
         # 3. 第 10-20 字节: 纬度 (11个字符，ASCII)
         # N/S ddmm.mmmmm
-        if len(lat_full_str := byte_data[offset : offset + 11].decode('ascii', errors='replace')) != 11: 
-            raise IndexError("纬度字节不足或解码失败")
-        if lat_full_str[0] in ['N', 'S']:
+        if len(byte_data) < offset + 11: raise IndexError("纬度字节不足")
+        lat_full_str = byte_data[offset : offset + 11].decode('ascii', errors='replace')
+        if len(lat_full_str) == 11 and lat_full_str[0] in ['N', 'S']:
             parsed_data['纬度半球'] = lat_full_str[0]
             parsed_data['纬度原始值'] = lat_full_str[1:] 
         else:
@@ -104,9 +104,9 @@ def parse_hex_content(hex_str):
 
         # 4. 第 21-32 字节: 经度 (12个字符，ASCII)
         # E/W dddmm.mmmmm
-        if len(lon_full_str := byte_data[offset : offset + 12].decode('ascii', errors='replace')) != 12:
-            raise IndexError("经度字节不足或解码失败")
-        if lon_full_str[0] in ['E', 'W']:
+        if len(byte_data) < offset + 12: raise IndexError("经度字节不足")
+        lon_full_str = byte_data[offset : offset + 12].decode('ascii', errors='replace')
+        if len(lon_full_str) == 12 and lon_full_str[0] in ['E', 'W']:
             parsed_data['经度半球'] = lon_full_str[0]
             parsed_data['经度原始值'] = lon_full_str[1:]
         else:
@@ -132,19 +132,61 @@ def parse_hex_content(hex_str):
         custom_data_bytes = byte_data[offset:]
         parsed_data['自定义数据_原始Hex'] = custom_data_bytes.hex().upper()
         
+        # 尝试进一步解析自定义数据为中文备注和标识信息
+        parsed_data['中文备注'] = '无'
+        parsed_data['标识信息'] = '无'
+
         if custom_data_bytes:
-            try:
-                # 优先尝试GBK解码，errors='replace'处理无法解码的字符
-                parsed_data['自定义数据'] = custom_data_bytes.decode('gbk', errors='replace')
-            except Exception:
-                # 尝试UTF-8解码
+            # 优先尝试作为GBK解码，如果有剩余字节再尝试作为ASCII解码标识信息
+            custom_data_len = len(custom_data_bytes)
+            
+            # 假设中文备注是GBK编码，每个汉字2字节
+            # 尝试各种可能的GBK长度 (2字节倍数)
+            decoded_gbk = ''
+            gbk_bytes_consumed = 0
+            
+            # 迭代尝试从头开始解析GBK，每次增加2个字节
+            for i in range(0, custom_data_len, 2):
                 try:
-                    parsed_data['自定义数据'] = custom_data_bytes.decode('utf-8', errors='replace')
-                except Exception:
-                    # 如果都失败，则显示原始字节的表示
+                    # 尝试解码从开始到当前位置的偶数字节
+                    temp_gbk = custom_data_bytes[:i+2].decode('gbk', errors='strict')
+                    decoded_gbk = temp_gbk # 记录成功解码的部分
+                    gbk_bytes_consumed = i + 2
+                except UnicodeDecodeError:
+                    break # 遇到解码失败，停止尝试
+                except Exception: # 捕获其他可能的异常
+                    break
+
+            if decoded_gbk:
+                parsed_data['中文备注'] = decoded_gbk
+                parsed_data['中文备注_原始Hex'] = custom_data_bytes[:gbk_bytes_consumed].hex().upper()
+                remaining_bytes = custom_data_bytes[gbk_bytes_consumed:]
+                
+                if remaining_bytes:
+                    # 剩余的字节尝试作为ASCII解码标识信息
+                    try:
+                        parsed_data['标识信息'] = remaining_bytes.decode('ascii', errors='strict')
+                        parsed_data['标识信息_原始Hex'] = remaining_bytes.hex().upper()
+                    except UnicodeDecodeError:
+                        parsed_data['标识信息'] = f"无法解码({remaining_bytes.hex().upper()})"
+                        parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "标识信息ASCII解码失败; "
+                
+            else: # 如果没有成功解码GBK，尝试整个作为ASCII或统一处理
+                try:
+                    # 尝试将全部剩余字节作为ASCII解码
+                    parsed_data['标识信息'] = custom_data_bytes.decode('ascii', errors='strict')
+                    parsed_data['标识信息_原始Hex'] = custom_data_bytes.hex().upper()
+                    parsed_data['中文备注'] = '无' # 明确没有中文备注
+                except UnicodeDecodeError:
+                    # 如果都不是，就统一处理为无法解码
                     parsed_data['自定义数据'] = f"无法解码({custom_data_bytes.hex()})"
+                    parsed_data['parse_warning'] = parsed_data.get('parse_warning', '') + "自定义数据无法识别编码; "
+                    parsed_data['中文备注'] = parsed_data['自定义数据'] # 将错误信息赋给中文备注，方便前端展示
+                    parsed_data['标识信息'] = '无' # 明确没有标识信息
         else:
-            parsed_data['自定义数据'] = "无"
+            parsed_data['自定义数据'] = "无" # 如果custom_data_bytes为空，则没有自定义数据
+            parsed_data['中文备注'] = "无"
+            parsed_data['标识信息'] = "无"
 
     except ValueError as e:
         parsed_data['parse_error'] = f"十六进制解析错误: {e}"
@@ -152,6 +194,12 @@ def parse_hex_content(hex_str):
         parsed_data['parse_error'] = f"字节数据不足，解析错误: {e}"
     except Exception as e:
         parsed_data['parse_error'] = f"未知解析错误: {e}"
+
+    # 如果有parse_error，则清空其他解析成功的字段，避免误导
+    if 'parse_error' in parsed_data:
+        parsed_data = {'parse_error': parsed_data['parse_error']}
+        if 'parse_warning' in parsed_data:
+            parsed_data['parse_error'] += f" (警告: {parsed_data['parse_warning']})"
 
     return parsed_data
 
@@ -204,12 +252,20 @@ def format_parsed_data_for_display(parsed_data, raw_post_data, id_number, receiv
     formatted['定位时间'] = parsed_data.get('定位时间', 'N/A')
     formatted['高程'] = parsed_data.get('高程', 'N/A')
     
-    custom_data = parsed_data.get('自定义数据', '无')
-    if str(custom_data).startswith('无法解码'):
-        # 自定义数据显示出错，但仍然要显示原始Hex
-        formatted['自定义数据'] = f"{custom_data} (原始Hex: {parsed_data.get('自定义数据_原始Hex', 'N/A')})"
+    # 自定义数据拆分后的字段
+    parsed_data_custom_combined = []
+    if parsed_data.get('中文备注') and parsed_data['中文备注'] != '无':
+        parsed_data_custom_combined.append(parsed_data['中文备注'])
+    if parsed_data.get('标识信息') and parsed_data['标识信息'] != '无':
+        parsed_data_custom_combined.append(parsed_data['标识信息'])
+    
+    if parsed_data_custom_combined:
+        formatted['自定义数据'] = ' '.join(parsed_data_custom_combined)
     else:
-        formatted['自定义数据'] = custom_data
+        formatted['自定义数据'] = parsed_data.get('自定义数据', '无') # 兜底，如果都没有则显示原始自定义数据（可能包含解码失败信息）
+
+    formatted['中文备注'] = parsed_data.get('中文备注', '无')
+    formatted['标识信息'] = parsed_data.get('标识信息', '无')
 
     # 将原始POST数据中的一些关键字段也添加到格式化数据中，方便搜索
     formatted['IdNumber'] = id_number # 使用传入的IdNumber
@@ -286,8 +342,8 @@ def receive_post_data():
 # --- Web 路由：显示数据 (现在将所有数据传给前端，由前端处理搜索和渲染) ---
 @app.route('/')
 def index():
-    # 获取默认的今天日期字符串用于前端
-    today = datetime.date.today().strftime("%Y-%m-%d")
+    # 获取默认的今天日期字符串用于前端 (此处不需要了，日期默认为空)
+    # today = datetime.date.today().strftime("%Y-%m-%d")
 
     # 准备所有数据，按IdNumber分组，每组内按时间倒序
     all_messages_grouped_for_frontend = {}
@@ -319,7 +375,6 @@ def index():
     
     return render_template('index.html', 
                            all_messages_grouped_json=json.dumps(all_messages_grouped_for_frontend, ensure_ascii=False),
-                           today_date=today,
                            unique_id_count=unique_id_count, # 传递给前端
                            total_messages_count=total_messages_count)
 

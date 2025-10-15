@@ -1,72 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}ID {{ id_number }} 的历史数据{% endblock %}
+{% block title %}未找到数据{% endblock %}
 
 {% block content %}
+    <h1>未找到数据</h1>
+    <p>抱歉，没有找到卡号 ID 为 '<strong>{{ id_number }}</strong>' 的历史数据。</p>
     <div class="nav-links">
         <a href="{{ url_for('index') }}">返回首页</a>
     </div>
-    <h1>卡号 ID: <strong>{{ id_number }}</strong> 的历史数据</h1>
-
-    {% if historical_messages %}
-        {% for msg in historical_messages %}
-            <div class="message-card">
-                <details open> {# 默认打开 #}
-                    <summary>
-                        <span class="message-card-icon">▶</span> {# 初始图标为右箭头 #}
-                        接收时间: <strong class="monospace-text">{{ msg.ReceiveTime }}</strong>
-                        <strong style="margin-left: 15px;">消息ID:</strong> <strong class="monospace-text">{{ msg.ParsedData.MessageId | default('N/A') }}</strong>
-                    </summary>
-                    <div class="card-content">
-                        <table>
-                            <tr>
-                                {# 不在表格中显示这些内部搜索字段，但最新接收时间在历史页面作为表格字段显示 #}
-                                {% for key in msg.ParsedData.keys() %}
-                                    {% if key not in ['IdNumber', 'MessageId', 'NetworkMode', '自定义数据_原始Hex', '纬度半球', '纬度原始值', '经度半球', '经度原始值', '隔离符'] %} 
-                                        <th>{{ key }}</th>
-                                    {% endif %}
-                                {% endfor %}
-                            </tr>
-                            <tr>
-                                {% for key, value in msg.ParsedData.items() %}
-                                    {% if key not in ['IdNumber', 'MessageId', 'NetworkMode', '自定义数据_原始Hex', '纬度半球', '纬度原始值', '经度半球', '经度原始值', '隔离符'] %}
-                                        <td>
-                                            {% if key == '状态' %}
-                                                {% if '解析错误' in value %}<span class='error-message'>{{ value }}</span>
-                                                {% elif '警告' in value %}<span class='warning-message'>{{ value }}</span>
-                                                {% else %}<span class='success-message'>{{ value }}</span>{% endif %}
-                                            {% elif key == '自定义数据' and '无法解码' in value %}<span class='warning-message'>{{ value }}</span>
-                                            {% else %}{{ value }}{% endif %}
-                                        </td>
-                                    {% endif %}
-                                {% endfor %}
-                            </tr>
-                        </table>
-                        <details>
-                            <summary>查看原始POST数据</summary>
-                            <pre>{{ msg.RawPostData }}</pre>
-                        </details>
-                    </div>
-                </details>
-            </div>
-        {% endfor %}
-    {% else %}
-        <p>ID '{{ id_number }}' 没有任何历史数据。</p>
-    {% endif %}
-
-    <script>
-        // 为历史页面的消息卡片添加折叠图标逻辑
-        document.querySelectorAll('.message-card details').forEach(detailsElem => {
-            const icon = detailsElem.querySelector('.message-card-icon');
-            if (icon) {
-                // 初始状态根据 details[open] 来设置图标
-                icon.textContent = detailsElem.open ? '▼' : '▶'; 
-            }
-            detailsElem.addEventListener('toggle', () => {
-                if (icon) {
-                    icon.textContent = detailsElem.open ? '▼' : '▶';
-                }
-            });
-        });
-    </script>
 {% endblock %}

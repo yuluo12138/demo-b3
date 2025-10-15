@@ -8,13 +8,13 @@
     <div class="search-form">
         <label for="search_query">内容搜索:</label>
         <input type="text" id="search_query" name="search_query" 
-               placeholder="最新接收时间, ID, 纬度, 经度, 海拔高, 自定义数据, 消息ID, 网络模式, 定位时间">
+               placeholder="最新接收时间, ID, 纬度, 经度, 海拔高, 中文备注, 标识信息, 消息ID, 网络模式, 定位时间">
 
         <label for="start_date">起始日期:</label>
-        <input type="date" id="start_date" name="start_date" value="{{ today_date }}">
+        <input type="date" id="start_date" name="start_date"> {# 移除 value="{{ today_date }}" #}
 
         <label for="end_date">结束日期:</label>
-        <input type="date" id="end_date" name="end_date" value="{{ today_date }}">
+        <input type="date" id="end_date" name="end_date"> {# 移除 value="{{ today_date }}" #}
         {# 实时搜索不需要提交按钮 #}
     </div>
 
@@ -23,7 +23,7 @@
     
     <div id="messages-container">
         <!-- 搜索结果将通过 JavaScript 动态加载到这里 -->
-        <p id="initial-no-data-message" style="display: none; font-size: 1.1em; color: #666; text-align: center;">目前没有接收到任何数据。请尝试发送POST请求。</p>
+        <p id="initial-no-data-message" style="display: none; font-size: 1.1em; color: #666; text-align: center; margin-top: 50px;">目前没有接收到任何数据。请尝试发送POST请求。</p>
     </div>
 
     <script>
@@ -37,13 +37,12 @@
         const searchResultsSummary = document.getElementById('search-results-summary');
         const initialNoDataMessage = document.getElementById('initial-no-data-message'); 
 
-        const today = "{{ today_date }}"; // 从后端获取的今天日期字符串
         const initialUniqueIdCount = {{ unique_id_count }}; // 初始唯一ID数量
         const initialTotalMessageCount = {{ total_messages_count }}; // 初始所有消息总数
 
         // 定义可搜索的字段 (需要与Python后端 format_parsed_data_for_display 中的键一致)
         const searchableKeys = [
-            '最新接收时间', 'IdNumber', '纬度', '经度', '高程', '自定义数据', 'MessageId', 'NetworkMode', '定位时间'
+            '最新接收时间', 'IdNumber', '纬度', '经度', '高程', '中文备注', '标识信息', 'MessageId', 'NetworkMode', '定位时间'
         ];
         
         // 辅助函数：将纯文本转换为包含高亮标签的HTML
@@ -51,15 +50,15 @@
             if (!query) return text;
             const lowerText = String(text).toLowerCase();
             const lowerQuery = query.toLowerCase();
+            
             const parts = [];
             let lastIndex = 0;
             let match;
 
-            // 使用正则表达式进行不区分大小写的全局匹配
             // 注意：query 中的特殊字符需要转义，以避免干扰正则表达式
             const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(escapedQuery, 'gi');
-            
+            const regex = new RegExp(escapedQuery, 'gi'); // 'gi' for global, case-insensitive
+
             while ((match = regex.exec(String(text))) !== null) {
                 // Add text before the match
                 parts.push(String(text).substring(lastIndex, match.index));
@@ -76,7 +75,7 @@
         function renderMessageTable(message, query) {
             let parsedDataHtml = '';
             // 定义显示顺序
-            const orderedKeys = ['状态', '最新接收时间', '定位时间', '纬度', '经度', '高程', '自定义数据', 'MessageId', 'NetworkMode'];
+            const orderedKeys = ['状态', '最新接收时间', '定位时间', '纬度', '经度', '高程', '中文备注', '标识信息', 'MessageId', 'NetworkMode'];
             let displayedKeys = [];
 
             // 优先按照 predefined order 来添加键
@@ -85,9 +84,10 @@
                     displayedKeys.push(key);
                 }
             }
-            // 添加所有剩余的，但不在 orderedKeys 中的键 (不包括 IdNumber，因为它在标题中)
+            // 添加所有剩余的，但不在 orderedKeys 中的键 (不包括 IdNumber, 自定义数据, 或原始Hex等内部字段)
             for (const key in message.ParsedData) {
-                if (!displayedKeys.includes(key) && key !== 'IdNumber') {
+                if (!displayedKeys.includes(key) && !['IdNumber', '自定义数据', '纬度半球', '纬度原始值', '经度半球', '经度原始值', '隔离符'].includes(key)) {
+                    // 过滤掉自定义数据（因为已经拆分），以及其他不直接显示的内部字段
                     displayedKeys.push(key);
                 }
             }
@@ -104,8 +104,8 @@
                     if (cellContent.includes('解析错误')) className = 'error-message';
                     else if (cellContent.includes('警告')) className = 'warning-message';
                     else if (cellContent.includes('解析成功')) className = 'success-message';
-                } else if (key === '自定义数据' && cellContent.includes('无法解码')) {
-                    className = 'warning-message';
+                } else if (key === '中文备注' && cellContent.includes('无法解码')) {
+                    className = 'warning-message'; // 如果中文备注无法解码，也视为警告
                 }
                 parsedDataHtml += `<td class="${className}">${highlightText(cellContent, query)}</td>`;
             }
@@ -141,11 +141,11 @@
         // 主搜索和渲染函数
         function performSearch() {
             const query = searchQueryInput.value.trim();
-            const startDateStr = startDateInput.value;
-            const endDateStr = endDateInput.value;
+            const startDateStr = startDateInput.value; // 可能是空字符串
+            const endDateStr = endDateInput.value;     // 可能是空字符串
             
-            // 判断当前是否有活跃的搜索条件
-            const isSearchActive = (query !== '') || (startDateStr !== today) || (endDateStr !== today);
+            // 判断当前是否有活跃的搜索条件 (如果查询字符串非空 OR 日期范围被指定)
+            const isSearchActive = (query !== '') || (startDateStr !== '') || (endDateStr !== '');
 
             let filteredIdNumbers = []; // 存储匹配的IdNumber (字母顺序)
             let filteredMessagesById = {}; // 存储过滤后的按IdNumber分组的所有消息 (用于历史展示)
@@ -175,7 +175,8 @@
                         
                         let matchDate = true;
                         // 只需要判断message.ReceiveTime，因为这是服务器接收时间
-                        const msgDateStr = message.ReceiveTime.substring(0, 10);
+                        const msgDateStr = message.ReceiveTime.substring(0, 10); // 格式 YYYY-MM-DD
+                        
                         if (startDateStr && endDateStr) {
                             if (msgDateStr < startDateStr || msgDateStr > endDateStr) {
                                 matchDate = false;
@@ -189,6 +190,7 @@
                                 matchDate = false;
                             }
                         }
+                        // 如果 startDateStr 和 endDateStr 都为空，则 matchDate 保持 true，不进行日期过滤
 
                         if (matchText && matchDate) {
                             matchingMessagesInId.push(message);
@@ -215,12 +217,13 @@
 
             // 清空旧的搜索结果和初始无数据消息
             messagesContainer.innerHTML = '';
-            initialNoDataMessage.style.display = 'none';
-            searchResultsSummary.style.display = 'none'; 
+            initialNoDataMessage.style.display = 'none'; // 总是先隐藏
+            searchResultsSummary.style.display = 'none'; // 总是先隐藏
 
-            // --- 处理初始无数据状态 (data_store.json 为空) ---
+            // --- 处理初始无数据状态 (allMessagesGrouped 为空) ---
             if (Object.keys(allMessagesGrouped).length === 0) {
                  initialNoDataMessage.style.display = 'block';
+                 searchResultsSummary.style.display = 'none'; // 确保此时标题不显示
                  return; 
             }
 
@@ -297,13 +300,13 @@
         startDateInput.addEventListener('change', performSearch); 
         endDateInput.addEventListener('change', performSearch);
 
-        // 页面加载时执行一次搜索，以显示初始数据 (默认当天)
+        // 页面加载时执行一次搜索，以显示初始数据 (默认所有时间，即无日期过滤)
         // 确保在数据为空时正确显示提示
         if (Object.keys(allMessagesGrouped).length === 0) {
              initialNoDataMessage.style.display = 'block';
              searchResultsSummary.style.display = 'none'; // 确保此时标题不显示
         } else {
-            performSearch(); // 初始渲染将显示所有ID的最新数据
+            performSearch(); // 初始渲染将显示所有ID的最新数据 (无日期和文本过滤)
         }
     </script>
 {% endblock %}
