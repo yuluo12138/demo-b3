@@ -6,6 +6,7 @@
     <title>{% block title %}HTTP 数据服务器{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
+        /* ... (CSS 样式保持不变，但增加或修改以下部分) ... */
         :root {
             --primary-color: #3498db;
             --primary-hover-color: #2980b9;
@@ -20,13 +21,19 @@
             --card-header-hover-bg: #e0e0e0;
             --summary-bg: #eaf3f8;
             --error-color: #e74c3c;
-            --warning-color: #f39c12; /* 警告色保留但可能不直接使用在状态显示 */
+            --warning-color: #f39c12;
             --success-color: #27ae60;
-            --highlight-bg: #ffeaa7;
+            --highlight-bg: #ffeaa7; /* 浅黄色高亮背景 */
             --code-bg: #f8f8f8;
             --table-header-bg: #f2f2f2;
             --table-row-hover-bg: #f9f9f9;
-            --id-card-bg-yellow: #fffdf7; /* 浅黄色背景 */
+            --id-card-bg-yellow: #fffdf7; /* 浅黄色卡片背景 */
+            
+            /* 新增：ID 分组头部浅蓝色样式 */
+            --id-group-header-bg-light: #e7f3fd; /* 浅蓝色 */
+            --id-group-header-hover-light: #d0e6fb; /* 鼠标悬停时的浅蓝色 */
+            --id-group-header-text-light: var(--heading-color); /* 头部文字颜色 */
+            --id-group-border-light: #c0dffb; /* ID分组边框颜色 */
         }
 
         body {
@@ -85,14 +92,14 @@
             background-color: var(--container-bg-color);
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 15px; /* 调整卡片间距 */
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
             overflow: hidden;
             transition: box-shadow 0.2s ease;
         }
-        .card.id-card-yellow { /* 新增的浅黄色卡片样式 */
+        .card.id-card-yellow {
             background-color: var(--id-card-bg-yellow);
-            border-color: #fce8a6; /* 配合黄色的边框 */
+            border-color: #fce8a6;
         }
         .card:hover {
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
@@ -111,17 +118,18 @@
             user-select: none;
             transition: background-color 0.2s ease;
         }
-        .card.id-card-yellow .card-header { /* 黄色卡片header的背景 */
-             background-color: #fcf8e3; /* 浅一点的黄色 */
+        .card.id-card-yellow .card-header {
+             background-color: #fcf8e3;
              border-bottom-color: #fce8a6;
         }
         .card-header:hover {
             background-color: var(--card-header-hover-bg);
         }
         .card-title-text {
-            font-weight: normal; /* Make the actual content less bold than the key */
+            font-weight: normal;
             color: var(--text-color);
         }
+        /* 独立的消息卡片折叠图标 */
         .card-toggle-icon {
             font-size: 1.2em;
             margin-left: 15px;
@@ -132,24 +140,23 @@
             transform: rotate(90deg);
         }
         .card-content {
-            padding: 0 20px; /* Initial padding, adjust when collapsed */
+            padding: 0 20px;
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease-out, padding 0.3s ease-out;
         }
         .card-content.expanded {
-            max-height: 1000px; /* Sufficiently large to show content */
+            max-height: 1000px; /* 仍然给小卡片一个限制，避免过度滚动 */
             padding-top: 15px;
             padding-bottom: 15px;
         }
         
-        /* 表格样式 for card content */
         .card-content table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
-            font-size: 0.9em; /* 减小字体，让更多内容在一行显示 */
-            table-layout: fixed; /* 固定表格布局，防止内容过多撑开 */
+            font-size: 0.9em;
+            table-layout: fixed;
         }
         .card-content thead th {
             background-color: var(--table-header-bg);
@@ -158,7 +165,7 @@
             text-align: left;
             font-weight: 500;
             color: var(--heading-color);
-            white-space: nowrap; /* 表头不换行 */
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
@@ -166,7 +173,6 @@
             padding: 8px 10px;
             border-bottom: 1px solid var(--border-color);
             vertical-align: top;
-            /* 关键改动：表格内容不换行 */
             white-space: nowrap; 
             overflow: hidden;
             text-overflow: ellipsis;
@@ -177,11 +183,10 @@
         .card-content tbody tr:last-child td {
             border-bottom: none;
         }
-        /* 表格列宽定义，根据内容调整 */
         .card-content th.col-locate-time, .card-content td.col-locate-time { width: 100px; }
         .card-content th.col-coords, .card-content td.col-coords { width: 130px; } 
         .card-content th.col-altitude, .card-content td.col-altitude { width: 80px; }
-        .card-content th.col-custom-data, .card-content td.col-custom-data { min-width: 180px; max-width: 300px; } /* 自定义数据可以伸缩 */
+        .card-content th.col-custom-data, .card-content td.col-custom-data { min-width: 180px; max-width: 300px; }
 
 
         .code-block {
@@ -189,7 +194,7 @@
             border: 1px solid var(--border-color);
             padding: 12px;
             border-radius: 6px;
-            white-space: pre-wrap; /* 允许原始 POST 数据换行 */
+            white-space: pre-wrap;
             word-break: break-all;
             font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
             font-size: 0.85em;
@@ -230,12 +235,10 @@
             gap: 10px;
         }
 
-        /* 状态文本颜色 */
         .error-text { color: var(--error-color); font-weight: bold; }
-        .warning-text { color: var(--warning-color); font-weight: bold; } /* 警告色保留但目前前端不直接使用此CSS */
+        .warning-text { color: var(--warning-color); font-weight: bold; }
         .success-text { color: var(--success-color); font-weight: bold; }
 
-        /* 高亮样式 */
         .highlight {
             background-color: var(--highlight-bg);
             padding: 1px 3px;
@@ -331,7 +334,6 @@
             background-color: #fdf3f3;
         }
 
-        /* 消息详情的额外信息区域 */
         .message-meta {
             padding: 10px 0;
             border-bottom: 1px solid var(--border-color);
@@ -339,8 +341,8 @@
             color: #555;
             display: flex;
             justify-content: space-between;
-            flex-wrap: wrap; /* 允许换行 */
-            gap: 10px; /* 元素间距 */
+            flex-wrap: wrap;
+            gap: 10px;
             align-items: center;
         }
         .message-meta .item {
@@ -353,8 +355,59 @@
             color: var(--heading-color);
         }
 
+        /* 针对ID分组的样式 */
+        .id-group {
+            margin-bottom: 25px; /* 每个ID组之间更大的间距 */
+            border: 1px solid var(--id-group-border-light); /* 浅蓝色边框 */
+            border-radius: 10px;
+            background-color: var(--container-bg-color); /* 内容区使用白色背景 */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            overflow: hidden; /* 确保子内容在折叠时隐藏 */
+        }
+        .id-group-header {
+            padding: 15px 20px;
+            background-color: var(--id-group-header-bg-light); /* ID分组头部浅蓝色背景 */
+            color: var(--id-group-header-text-light); /* 头部文字颜色 */
+            font-weight: 600;
+            font-size: 1.2em;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+        .id-group-header:hover {
+            background-color: var(--id-group-header-hover-light); /* 鼠标悬停时的浅蓝色 */
+        }
+        .id-group-header .id-text {
+            font-weight: bold;
+            color: var(--id-group-header-text-light); /* 与头部文字颜色保持一致 */
+            margin-right: 10px;
+        }
+        .id-group-header .id-group-toggle-icon {
+            font-size: 1.2em;
+            margin-left: 15px;
+            color: var(--id-group-header-text-light); /* 箭头颜色与文字一致 */
+            transform: rotate(0deg); /* 默认朝下（展开状态） */
+            transition: transform 0.2s ease-in-out;
+        }
+        .id-group-header .id-group-toggle-icon.rotated {
+            transform: rotate(-90deg); /* 旋转到左边（折叠状态） */
+        }
+        .id-group-content {
+            padding: 15px 20px;
+            max-height: none; /* 展开时不再限制最大高度 */
+            overflow: visible; /* 展开时允许内容自然溢出和滚动 */
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+        }
+        .id-group-content.collapsed {
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            overflow: hidden; /* 折叠时隐藏溢出内容 */
+        }
 
-        /* 响应式设计 */
         @media (max-width: 992px) {
             .container {
                 padding: 25px;
@@ -375,6 +428,7 @@
                 width: 100%;
                 margin: 10px 0;
             }
+            .id-group-header { font-size: 1em; padding: 12px 15px; }
         }
         @media (max-width: 576px) {
             .container {
@@ -406,24 +460,26 @@
             .card-content.expanded { padding-left: 15px; padding-right: 15px; }
             .button { padding: 8px 15px; font-size: 0.9em; }
             
-            /* 在小屏幕上，表格需要横向滚动 */
             .card-content table {
                 display: block;
                 overflow-x: auto;
-                /* white-space: nowrap; 已经在 tbody td 上设置了，这里不需要 */
                 -webkit-overflow-scrolling: touch;
             }
-            /* 小屏幕下，保持thead和tbody为block，tr为table-row，th/td为table-cell，以便浏览器处理横向滚动 */
             .card-content thead, .card-content tbody {
                 display: table;
-                width: 100%; /* 确保表格占满可用宽度 */
+                width: 100%;
             }
             .card-content tr {
                 display: table-row;
             }
             .card-content th, .card-content td {
                 display: table-cell;
-                min-width: 80px; /* 确保小屏幕下也有最小宽度 */
+                min-width: 80px;
+            }
+            .id-group-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
             }
         }
     </style>
@@ -440,7 +496,16 @@
     </div>
 
     <script>
-        // 通用函数：HTML 转义
+        // 定义表格的列和对应的键，仅包含核心的定位信息 (在 base.html 中定义，所有页面共享)
+        const TABLE_COLUMNS = [
+            { header: '定位时间', key: '定位时间', class: 'col-locate-time' },
+            { header: '纬度', key: '纬度', class: 'col-coords' },
+            { header: '经度', key: '经度', class: 'col-coords' },
+            { header: '高程', key: '高程', class: 'col-altitude' },
+            { header: '自定义数据', key: '自定义数据', class: 'col-custom-data' }
+        ];
+
+        // --- 通用辅助函数 ---
         function escapeHtml(text) {
             var map = {
                 '&': '&amp;',
@@ -452,29 +517,26 @@
             return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
         }
 
-        // 高亮文本函数 (改进版，处理字间距问题)
         function highlightText(text, query) {
             if (!query) {
-                return escapeHtml(String(text)); // 确保是字符串
+                return escapeHtml(String(text));
             }
-            const escapedText = escapeHtml(String(text)); // 确保是字符串并转义
-            // 注意：这里需要对 query 进行正则转义，防止用户输入特殊字符导致正则错误
-            const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            const escapedText = escapeHtml(String(text));
+            // 使用 g 确保全局匹配，i 确保不区分大小写
+            const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); 
             return escapedText.replace(regex, match => `<span class="highlight">${match}</span>`);
         }
         
-        // 通用卡片折叠功能 (首次加载时调用，或在动态内容加载后重新绑定)
+        // --- 消息卡片折叠/展开逻辑 ---
         function bindCardToggleEvents() {
             document.querySelectorAll('.card-header').forEach(header => {
-                // 确保不重复绑定事件
                 header.removeEventListener('click', toggleCard); 
                 header.addEventListener('click', toggleCard);
 
-                // 确保初始状态图标和内容匹配
                 const content = header.nextElementSibling;
                 const icon = header.querySelector('.card-toggle-icon');
-                // 这里默认都是折叠的，除了历史页面默认展开
-                if (content && icon) { // 确保元素存在
+                if (content && icon) {
+                    // 初始化时根据是否有 expanded 类来设置图标状态
                     if (content.classList.contains('expanded')) {
                         icon.classList.add('rotated');
                     } else {
@@ -489,16 +551,146 @@
             const content = header.nextElementSibling;
             const icon = header.querySelector('.card-toggle-icon');
             
-            if (content && icon) { // 确保元素存在
-                content.classList.toggle('expanded'); // Toggle expanded class
+            if (content && icon) {
+                content.classList.toggle('expanded');
                 icon.classList.toggle('rotated');
             }
         }
 
-        // DOMContentLoaded 在页面所有元素加载完毕后触发
+        // --- ID分组折叠/展开逻辑 ---
+        function bindIdGroupToggleEvents() {
+            document.querySelectorAll('.id-group-header').forEach(header => {
+                header.removeEventListener('click', toggleIdGroup);
+                header.addEventListener('click', toggleIdGroup);
+
+                const content = header.nextElementSibling; // .id-group-content
+                const icon = header.querySelector('.id-group-toggle-icon');
+                if (content && icon) {
+                    // 初始化时根据是否有 collapsed 类来设置图标状态
+                    if (content.classList.contains('collapsed')) {
+                        icon.classList.add('rotated'); // 折叠时箭头朝左
+                    } else {
+                        icon.classList.remove('rotated'); // 展开时箭头朝下
+                    }
+                }
+            });
+        }
+
+        function toggleIdGroup(event) {
+            const header = event.currentTarget;
+            const content = header.nextElementSibling; // The div.id-group-content
+            const icon = header.querySelector('.id-group-toggle-icon');
+
+            if (content && icon) {
+                content.classList.toggle('collapsed');
+                icon.classList.toggle('rotated');
+            }
+        }
+
+
+        // --- 统一的创建消息卡片的函数 (现在在 base.html 中定义) ---
+        // totalCount 参数现在仅在 isHistoryView=false (主页概览模式)时有意义
+        function createMessageCardHtml(idNumber, msg, highlightQuery, shouldExpand = false, isHistoryView = false) {
+            let cardHtml = '';
+            
+            const idNumberDisplay = idNumber || 'N/A'; // 确保 IdNumber 有值
+            
+            // 接收时间是唯一的，用于卡片头部，作为区分同一ID下不同历史消息的标志
+            const receiveTimeFormatted = msg['接收时间'];
+
+            // 卡片标题：始终显示接收时间 + 消息ID
+            let headerText = `接收时间: <span class="card-title-text">${highlightText(receiveTimeFormatted, highlightQuery)}</span> - ` +
+                             `消息ID: <span class="card-title-text">${highlightText(msg['MessageId'], highlightQuery)}</span>`;
+            
+            let historyLinkHtml = '';
+            // 只有在非历史页面 (主页面) 且 idNumber 有效时才显示“查看历史”按钮
+            if (!isHistoryView && idNumberDisplay !== 'N/A') { 
+                const historyBaseUrl = "{{ url_for('history', id_number_param='') }}";
+                const historyFullLink = `${historyBaseUrl}${encodeURIComponent(idNumberDisplay)}`;
+                historyLinkHtml = `<a href="${historyFullLink}" class="button secondary" style="margin-left: 10px;">查看该ID所有历史</a>`;
+            }
+
+            const parseStatusText = msg['解析状态'] ? msg['解析状态'].text : 'N/A';
+            const parseStatusClass = msg['解析状态'] ? msg['解析状态'].class : '';
+            
+            const dataId = msg['数据标识'] || 'N/A';
+
+            const contentClass = `card-content ${shouldExpand ? 'expanded' : ''}`;
+            const iconClass = `card-toggle-icon ${shouldExpand ? 'rotated' : ''}`;
+
+            cardHtml += `
+                <div class="card id-card-yellow" data-id="${idNumberDisplay}" data-receive-time="${receiveTimeFormatted}">
+                    <div class="card-header">
+                        <div>${headerText}</div>
+                        <div>
+                            ${historyLinkHtml}
+                            <span class="${iconClass}">▶</span>
+                        </div>
+                    </div>
+                    <div class="${contentClass}">
+                        <div class="message-meta">
+                            <div class="item">数据标识: <span>${highlightText(dataId, highlightQuery)}</span></div>
+                            <div class="item">解析状态: <span class="${parseStatusClass}">${highlightText(parseStatusText, highlightQuery)}</span></div>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+            `;
+            TABLE_COLUMNS.forEach(col => {
+                cardHtml += `<th class="${col.class}">${escapeHtml(col.header)}</th>`;
+            });
+
+            cardHtml += `
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+            `;
+            TABLE_COLUMNS.forEach(col => {
+                let displayedValue;
+                let valueClass = col.class; 
+                let rawValue = msg[col.key];
+
+                if (col.key === '自定义数据' && String(rawValue).length > 50) { 
+                    const shortValue = String(rawValue).substring(0, 50) + '...';
+                    displayedValue = `
+                        <details style="display: block;">
+                            <summary>${highlightText(shortValue, highlightQuery)}</summary>
+                            <pre class="code-block" style="max-height: 100px;">${highlightText(String(rawValue), highlightQuery)}</pre>
+                        </details>
+                    `;
+                } else {
+                    displayedValue = highlightText(String(rawValue || 'N/A'), highlightQuery);
+                }
+                
+                cardHtml += `<td class="${valueClass}">${displayedValue}</td>`;
+            });
+            
+            cardHtml += `
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        {# 原始POST数据：主页和历史页面都显示 #}
+                        ${msg.raw_post_data_json ? `
+                        <div style="margin-top: 20px;">
+                            <details style="margin-top: 5px;">
+                                <summary class="button secondary" style="cursor: pointer; display: inline-block; padding: 5px 10px; font-size: 0.85em;">点击查看原始POST数据</summary>
+                                <pre class="code-block">${highlightText(msg.raw_post_data_json, highlightQuery)}</pre>
+                            </details>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            return cardHtml;
+        }
+
+
         document.addEventListener('DOMContentLoaded', () => {
-            // base.html 应该在页面加载时就绑定卡片折叠事件，以便所有页面都支持
-            bindCardToggleEvents(); 
+            // 在页面加载时，现在只需要绑定 ID 分组的折叠事件，消息卡片内部的折叠事件在 renderMessages 后再绑定
+            // bindCardToggleEvents(); // 这个现在会在 renderMessages 内部调用
+            // bindIdGroupToggleEvents(); // 这个现在会在 renderMessages 内部调用
         });
     </script>
 </body>

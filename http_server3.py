@@ -13,9 +13,7 @@ app = Flask(__name__)
 
 # --- 配置 ---
 DATA_FILE = 'data_store.json'
-# 全局数据存储，结构: {"IdNumber": [{"raw_post_data": {}, "parsed_content": {}, "receive_time": ""}, ...]}
-# 每个 IdNumber 下的消息列表是按 receive_time 倒序存储的，最新的在最前面
-DATA_STORE = {}
+DATA_STORE = {} # 存储原始的 message_entry: {raw_post_data, parsed_content, receive_time}
 
 # --- 数据持久化辅助函数 ---
 def load_data():
@@ -30,14 +28,16 @@ def load_data():
                     raise ValueError("加载的数据不是字典格式。")
                 DATA_STORE = loaded_data
             
-            # 确保每个 IdNumber 下的消息列表都是按 receive_time 倒序排列
             for id_num, messages in DATA_STORE.items():
                 if not isinstance(messages, list):
                     print(f"[{datetime.datetime.now()}] [WARN] ID '{id_num}' 下的数据不是列表，将跳过或重置。")
                     DATA_STORE[id_num] = []
                     continue
+                # 确保消息按接收时间倒序排列
                 DATA_STORE[id_num] = sorted(
-                    messages, key=lambda x: datetime.datetime.fromisoformat(x.get('receive_time', '1970-01-01T00:00:00')), reverse=True
+                    messages, 
+                    key=lambda x: datetime.datetime.fromisoformat(x.get('receive_time', '1970-01-01T00:00:00')), 
+                    reverse=True
                 )
             print(f"[{datetime.datetime.now()}] [INFO] 数据从 {DATA_FILE} 加载成功，包含 {len(DATA_STORE)} 个ID。")
         except json.JSONDecodeError:
@@ -58,7 +58,6 @@ def save_data():
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(DATA_STORE, f, indent=2, ensure_ascii=False)
-        # print(f"[{datetime.datetime.now()}] [DEBUG] 数据已保存到 {DATA_FILE}。") # 频繁打印，可根据需要取消注释
     except Exception as e:
         print(f"[{datetime.datetime.now()}] [ERROR] 保存数据到 {DATA_FILE} 时发生错误: {e}")
 
@@ -66,7 +65,6 @@ def save_data():
 def parse_hex_content(hex_str):
     """
     解析十六进制电文内容，返回解析后的字典。
-    结构: A4 + 定位时间(8) + 纬度半球(1) + 纬度(10) + 经度半球(1) + 经度(11) + 高程(8) + 隔离符(1) + 自定义数据(N)
     """
     parsed_data = {"raw_hex_content": hex_str}
     
@@ -219,30 +217,26 @@ def parse_hex_content(hex_str):
     
     # 最终确定解析状态
     if 'parse_error_detail' in parsed_data:
-        parsed_data['parse_status_text'] = parsed_data.get('parse_status_text', '解析错误') # 使用前面设置的错误文本
+        parsed_data['parse_status_text'] = parsed_data.get('parse_status_text', '解析错误')
         parsed_data['parse_status_class'] = "error-text"
     elif 'parse_warning_detail' in parsed_data:
-        # 根据要求，警告也归为错误显示
         parsed_data['parse_status_text'] = f"解析警告: {parsed_data['parse_warning_detail'].strip()}"
         parsed_data['parse_status_class'] = "error-text"
     else:
         parsed_data['parse_status_text'] = "解析成功"
         parsed_data['parse_status_class'] = "success-text"
 
-
     return parsed_data
 
 def format_coords(hemisphere, value_str):
     """
     格式化经纬度，并处理无效值。
-    例如: N4005.76783 -> 北纬40°05.76783'
     """
     if not isinstance(hemisphere, str) or not isinstance(value_str, str) or \
        not re.match(r'^[0-9.]+$', value_str):
         return f"{hemisphere if isinstance(hemisphere, str) else ''}{value_str if isinstance(value_str, str) else ''} (格式错误或缺失)"
 
     try:
-        # 匹配 度分.分小数 的模式
         match = re.match(r'^(\d+)(\d{2}\.\d{5})$', value_str)
         if not match:
             return f"{hemisphere}{value_str} (格式不符ddmm.mmmmm或dddmm.mmmmm)"
@@ -263,16 +257,13 @@ def format_coords(hemisphere, value_str):
 def format_altitude(alt_str):
     """
     格式化高程，并处理无效值。
-    例如: +00099.5 -> +99.5米, -00010.2 -> -10.2米
     """
     if not isinstance(alt_str, str) or not re.match(r'^[+-]?[0-9]{1,5}\.[0-9]$', alt_str):
         return f"{alt_str} (格式错误或缺失)"
     try:
         value = float(alt_str)
-        # Python float格式化会移除不必要的0，但我们希望保留小数点后一位
-        # 使用 f-string 格式化，并手动处理正号，负号会自动带上
         formatted_value = f"{value:.1f}"
-        if value >= 0 and not formatted_value.startswith('+'): # 确保正数有+号
+        if value >= 0 and not formatted_value.startswith('+'):
             formatted_value = '+' + formatted_value
         return f"{formatted_value}米"
     except Exception as e:
@@ -282,53 +273,52 @@ def format_altitude(alt_str):
 def format_parsed_data_for_display(parsed_data, raw_post_data, receive_time):
     """
     将解析后的数据格式化为更友好的显示格式。
-    现在返回的 '解析状态' 会是 {text: "...", class: "..."} 的字典。
+    注意：此函数现在直接返回一个扁平化的字典，包含所有用于显示和搜索的字段。
     """
     formatted = {}
 
-    # 从 raw_post_data 中提取关键信息
     formatted['IdNumber'] = raw_post_data.get('IdNumber', 'N/A')
     formatted['MessageId'] = raw_post_data.get('MessageId', 'N/A')
     formatted['DeliveryCount'] = raw_post_data.get('DeliveryCount', 'N/A')
     formatted['NetworkMode'] = raw_post_data.get('NetworkMode', 'N/A')
     formatted['接收时间'] = receive_time if receive_time else 'N/A'
     
-    # 解析状态现在是一个字典，包含文本和类名
     formatted['解析状态'] = {
         'text': parsed_data.get('parse_status_text', '未知状态'),
         'class': parsed_data.get('parse_status_class', '')
     }
 
-    # 如果是严重解析错误，就不再尝试格式化其他字段
+    # 总是包含这些字段，即使在错误情况下也提供 N/A
+    formatted['数据标识'] = parsed_data.get('数据标识', 'N/A')
+    formatted['定位时间'] = parsed_data.get('定位时间', 'N/A')
+    formatted['纬度'] = 'N/A'
+    formatted['经度'] = 'N/A'
+    formatted['高程'] = 'N/A'
+    formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A')
+
     if parsed_data.get('parse_status_class') == 'error-text':
-        # 在错误情况下，定位时间等字段可能缺失，统一显示为N/A
-        formatted['数据标识'] = parsed_data.get('数据标识', 'N/A')
-        formatted['定位时间'] = parsed_data.get('定位时间', 'N/A')
-        formatted['纬度'] = 'N/A'
-        formatted['经度'] = 'N/A'
-        formatted['高程'] = 'N/A'
-        formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A') # 自定义数据可能部分解析成功
-        # 传递错误详情以便在前端展示
-        formatted['parse_error_detail'] = parsed_data.get('parse_error_detail', '')
-        formatted['parse_warning_detail'] = parsed_data.get('parse_warning_detail', '')
+        # 错误状态下，直接使用解析器返回的原始/错误信息
+        # 纬度经度高程保持N/A
+        formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A') # 自定义数据可能在解析错误时仍然存在
+        # 添加原始POST数据，方便前端搜索
+        formatted['raw_post_data_json'] = json.dumps(raw_post_data, indent=2, ensure_ascii=False)
         return formatted
 
 
-    formatted['数据标识'] = parsed_data.get('数据标识', 'N/A')
-    formatted['定位时间'] = parsed_data.get('定位时间', 'N/A')
-    
-    # 格式化纬度
+    # 解析成功或有警告时，格式化字段
     lat_hemi = parsed_data.get('纬度半球')
     lat_val = parsed_data.get('原始纬度值')
     formatted['纬度'] = format_coords(lat_hemi, lat_val)
 
-    # 格式化经度
     lon_hemi = parsed_data.get('经度半球')
     lon_val = parsed_data.get('原始经度值')
     formatted['经度'] = format_coords(lon_hemi, lon_val)
     
     formatted['高程'] = format_altitude(parsed_data.get('高程', 'N/A'))
     formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A')
+
+    # 添加原始POST数据，方便前端搜索
+    formatted['raw_post_data_json'] = json.dumps(raw_post_data, indent=2, ensure_ascii=False)
 
     return formatted
 
@@ -355,22 +345,20 @@ def receive_post_data():
             response_payload["Code"] = f"error: Missing required field '{field}'"
             print(f"[{datetime.datetime.now()}] [ERROR] 缺少必填字段 '{field}'。Payload: {data}")
             return jsonify(response_payload), 400
-        if not isinstance(data[field], str): # 确保这些字段是字符串
+        if not isinstance(data[field], str):
              response_payload["Code"] = f"error: Field '{field}' must be a string"
              print(f"[{datetime.datetime.now()}] [ERROR] 字段 '{field}' 必须是字符串。Payload: {data}")
              return jsonify(response_payload), 400
 
     id_number = data['IdNumber']
     content_hex = data['Content']
-    receive_time = datetime.datetime.now().isoformat() # 服务器接收时间
+    receive_time = datetime.datetime.now().isoformat()
 
     print(f"[{datetime.datetime.now()}] [INFO] API收到请求 - IdNumber: {id_number}, MessageId: {data['MessageId']}")
 
     parsed_content = parse_hex_content(content_hex)
-    # 这里打印使用 pure text，避免日志中出现HTML
     print(f"[{datetime.datetime.now()}] [INFO] 解析结果 (Id:{id_number}, MsgId:{data['MessageId']}): {parsed_content.get('parse_status_text', '未知状态')}")
     
-    # 存储原始 POST 数据，解析结果和接收时间
     message_entry = {
         "raw_post_data": data,
         "parsed_content": parsed_content,
@@ -380,10 +368,9 @@ def receive_post_data():
     if id_number not in DATA_STORE:
         DATA_STORE[id_number] = []
     
-    # 插入到列表开头，确保最新消息总在最前面
+    # 始终添加到列表开头，保持最新消息在最前面
     DATA_STORE[id_number].insert(0, message_entry)
     
-    # 持久化数据
     save_data()
     print(f"[{datetime.datetime.now()}] [INFO] 数据已为 IdNumber {id_number} 保存并持久化。")
 
@@ -394,69 +381,75 @@ def receive_post_data():
 @app.route('/')
 def index():
     print(f"[{datetime.datetime.now()}] [INFO] 访问主页 '/'。")
-    # 准备前端展示所需的数据
-    all_messages_grouped_for_frontend = {}
-    for id_num, messages in DATA_STORE.items():
-        if not messages: # 如果某个ID下没有消息，跳过
-            continue
-        
-        # 主页只显示最新的1条消息，但包含所有解析字段，方便搜索
-        latest_message_entry = messages[0] 
-        
-        # 将原始解析数据完全格式化，包含所有字段
-        formatted_data = format_parsed_data_for_display(
-            latest_message_entry.get('parsed_content', {}),
-            latest_message_entry.get('raw_post_data', {}),
-            latest_message_entry.get('receive_time', None) # 传递 None 允许 format_parsed_data_for_display 处理 'N/A'
-        )
-        all_messages_grouped_for_frontend[id_num] = {
-            "latest_message": formatted_data,
-            "total_count": len(messages)
-        }
-
-    unique_id_count = len(DATA_STORE)
-    total_messages_count = sum(len(msgs) for msgs in DATA_STORE.values())
     
-    # 确保 IdNumber 在前端按字母顺序显示
-    sorted_id_numbers = sorted(DATA_STORE.keys())
+    # 准备所有 ID 的所有消息，并进行格式化
+    all_messages_for_frontend = {} # 格式: { "ID1": [formatted_msg1, formatted_msg2, ...], "ID2": [...] }
+    sorted_id_numbers = sorted(DATA_STORE.keys()) # 保持 ID 排序
 
-    print(f"[{datetime.datetime.now()}] [INFO] 主页准备向前端发送 {len(all_messages_grouped_for_frontend)} 个分组数据。")
+    total_unique_ids = 0
+    total_all_messages_count = 0
+
+    for id_num in sorted_id_numbers: # 确保ID有序
+        messages_for_id = []
+        if id_num in DATA_STORE:
+            for msg_entry in DATA_STORE[id_num]:
+                formatted_msg = format_parsed_data_for_display(
+                    msg_entry.get('parsed_content', {}),
+                    msg_entry.get('raw_post_data', {}),
+                    msg_entry.get('receive_time', None)
+                )
+                messages_for_id.append(formatted_msg)
+            
+            if messages_for_id: # 只添加有消息的ID
+                all_messages_for_frontend[id_num] = messages_for_id
+                total_unique_ids += 1
+                total_all_messages_count += len(messages_for_id)
+
+    # 重新获取排序后的 ID 列表，现在只包含有消息的 ID
+    final_sorted_id_numbers_with_messages = sorted(all_messages_for_frontend.keys())
+
+
+    print(f"[{datetime.datetime.now()}] [INFO] 主页准备向前端发送所有 {total_unique_ids} 个 ID 的 {total_all_messages_count} 条消息。")
     return render_template(
         'index.html',
-        # 直接使用 tojson 过滤器将 Python 字典/列表安全地转换为 JavaScript 对象字面量
-        all_messages_grouped_js_obj=all_messages_grouped_for_frontend,
-        sorted_id_numbers_js_arr=sorted_id_numbers,
-        unique_id_count=unique_id_count,
-        total_messages_count=total_messages_count
+        # 将所有 ID 的所有消息传递给前端，前端 JS 会根据搜索条件进行过滤和渲染
+        all_messages_grouped_by_id=all_messages_for_frontend, 
+        sorted_id_numbers_js_arr=final_sorted_id_numbers_with_messages, # 仍然传递排序后的ID列表
+        # 这两个值现在只是全局总数，前端会计算过滤后的数量
+        unique_id_count_total=total_unique_ids,
+        total_messages_count_total=total_all_messages_count
     )
 
 @app.route('/history/<string:id_number_param>')
 def history(id_number_param):
     print(f"[{datetime.datetime.now()}] [INFO] 访问历史页面 '/history/{id_number_param}'。")
-    id_number = id_number_param # URL path 中获取的 IdNumber
+    id_number = id_number_param
 
     if id_number not in DATA_STORE or not DATA_STORE[id_number]:
         print(f"[{datetime.datetime.now()}] [WARN] 未找到 ID '{id_number}' 的历史数据。")
         return render_template('not_found.html', id_number=id_number), 404
 
     historical_messages_raw = DATA_STORE[id_number]
+    
     historical_messages_formatted = []
-
     for msg_entry in historical_messages_raw:
         formatted_msg = format_parsed_data_for_display(
             msg_entry.get('parsed_content', {}),
             msg_entry.get('raw_post_data', {}),
             msg_entry.get('receive_time', None)
         )
-        # 将原始 POST 数据也传递给模板，以便在页面上显示
-        formatted_msg['raw_post_data_json'] = json.dumps(msg_entry.get('raw_post_data', {}), indent=2, ensure_ascii=False)
+        # raw_post_data_json 已经在 format_parsed_data_for_display 中添加
         historical_messages_formatted.append(formatted_msg)
+
+    # 从URL查询参数中获取搜索关键词
+    query = request.args.get('query', '') 
 
     print(f"[{datetime.datetime.now()}] [INFO] ID '{id_number_param}' 历史页面已加载，包含 {len(historical_messages_formatted)} 条消息。")
     return render_template(
         'history.html',
         id_number=id_number,
-        historical_messages=historical_messages_formatted
+        historical_messages=historical_messages_formatted, # 传递已经格式化好的消息列表
+        initial_query=query # 传递搜索关键词给前端
     )
 
 @app.errorhandler(404)
@@ -464,11 +457,9 @@ def page_not_found(e):
     print(f"[{datetime.datetime.now()}] [WARN] 发生 404 错误: {request.path}")
     return render_template('not_found.html'), 404
 
-
 # --- 应用启动 ---
 if __name__ == '__main__':
-    load_data() # 在应用启动前加载数据
+    load_data()
     print(f"[{datetime.datetime.now()}] [INFO] Flask 应用启动中...")
-    # debug=True 会在代码改动时自动重启，并且提供更详细的错误信息
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(host='0.0.0.0', port=5000, debug=True)
 

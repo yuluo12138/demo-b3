@@ -4,74 +4,118 @@
 {% block page_title %}卡号: {{ id_number }} 的历史消息{% endblock %}
 
 {% block content %}
-    <div class="button-group">
+    <div class="button-group" style="margin-bottom: 20px;">
         <a href="{{ url_for('index') }}" class="button">返回首页</a>
     </div>
 
-    {% if historical_messages %}
-        {% for msg in historical_messages %}
-            <div class="card id-card-yellow"> {# ID卡片使用浅黄色样式 #}
-                <div class="card-header">
-                    <div>
-                        接收时间: <span class="card-title-text">{{ msg['接收时间'] }}</span> - 消息ID: <span class="card-title-text">{{ msg['MessageId'] }}</span>
-                    </div>
-                    {# 历史页面默认内容展开，所以初始图标是旋转的 #}
-                    <span class="card-toggle-icon rotated">▶</span> 
-                </div>
-                <div class="card-content expanded"> {# 历史页面卡片内容默认展开 #}
-                    <div class="message-meta">
-                        <div class="item">数据标识: <span>{{ msg['数据标识'] }}</span></div>
-                        <div class="item">解析状态: <span class="{{ msg['解析状态'].class }}">{{ msg['解析状态'].text }}</span></div>
-                    </div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="col-locate-time">定位时间</th>
-                                <th class="col-coords">纬度</th>
-                                <th class="col-coords">经度</th>
-                                <th class="col-altitude">高程</th>
-                                <th class="col-custom-data">自定义数据</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td class="col-locate-time">{{ msg['定位时间'] }}</td>
-                                <td class="col-coords">{{ msg['纬度'] }}</td>
-                                <td class="col-coords">{{ msg['经度'] }}</td>
-                                <td class="col-altitude">{{ msg['高程'] }}</td>
-                                <td class="col-custom-data">
-                                    {# 对自定义数据进行特殊处理，如果很长就用details包裹 #}
-                                    {% if msg['自定义数据'] and msg['自定义数据']|length > 50 %}
-                                        <details style="display: block;">
-                                            <summary>{{ msg['自定义数据'][:50] ~ '...' }}</summary>
-                                            <pre class="code-block" style="max-height: 100px;">{{ msg['自定义数据'] }}</pre>
-                                        </details>
-                                    {% else %}
-                                        {{ msg['自定义数据'] }}
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+    <div class="search-controls" style="grid-template-columns: 1fr; align-items: stretch;">
+        <div>
+            <label for="historySearchQuery">历史消息搜索</label>
+            <input type="text" id="historySearchQuery" placeholder="搜索定位时间、经纬度、自定义数据、原始POST数据等...">
+        </div>
+    </div>
 
-                    <div style="margin-top: 20px;">
-                        <details style="margin-top: 5px;">
-                            <summary class="button secondary" style="cursor: pointer; display: inline-block;">点击查看原始POST数据</summary>
-                            <pre class="code-block">{{ msg.raw_post_data_json }}</pre>
-                        </details>
-                    </div>
-                </div>
-            </div>
-        {% endfor %}
-    {% else %}
-        <p class="no-data-message">ID '{{ id_number }}' 没有任何历史数据。</p>
-    {% endif %}
+    <div id="noHistorySearchResults" class="no-data-message" style="display: none;">
+        未找到匹配的历史数据。请尝试调整搜索条件。
+    </div>
+    <div id="historyMessagesContainer">
+        <!-- 历史消息卡片将在这里通过 JavaScript 渲染 -->
+    </div>
 
     <script>
+        console.log('--- Frontend Debugging Start: Script Loaded (history.html) ---');
+
+        // Flask 传递过来的格式化后的历史消息数据
+        const historicalMessages = {{ historical_messages | tojson }};
+        // 从 URL 获取的初始搜索查询
+        const initialQuery = "{{ initial_query }}";
+
+        const historySearchQueryInput = document.getElementById('historySearchQuery');
+        const historyMessagesContainer = document.getElementById('historyMessagesContainer');
+        const noHistorySearchResultsDiv = document.getElementById('noHistorySearchResults');
+
+        // 渲染历史消息的函数
+        function renderHistoryMessages() {
+            console.log('--- renderHistoryMessages called (history.html) ---');
+            const query = historySearchQueryInput.value.trim(); // 保留原始query用于高亮
+            const lowerCaseQuery = query.toLowerCase();
+            
+            // 历史页面，默认所有卡片都展开
+            const shouldExpandCards = true; 
+
+            let filteredMessages = [];
+            if (!query) {
+                // 如果没有搜索词，则显示所有历史消息
+                filteredMessages = historicalMessages;
+            } else {
+                // 根据搜索词过滤消息
+                historicalMessages.forEach(msg => {
+                    let matchFound = false;
+                    
+                    // 检查 IdNumber, MessageId, 接收时间
+                    if (String(msg['IdNumber']).toLowerCase().includes(lowerCaseQuery) ||
+                        String(msg['MessageId']).toLowerCase().includes(lowerCaseQuery) ||
+                        String(msg['接收时间']).toLowerCase().includes(lowerCaseQuery)) {
+                        matchFound = true;
+                    } else {
+                        // 检查表格内的所有字段
+                        for (const col of TABLE_COLUMNS) {
+                            const value = String(msg[col.key]);
+                            if (value.toLowerCase().includes(lowerCaseQuery)) {
+                                matchFound = true;
+                                break;
+                            }
+                        }
+                        // 检查数据标识、解析状态
+                        if (!matchFound && String(msg['数据标识']).toLowerCase().includes(lowerCaseQuery)) {
+                            matchFound = true;
+                        }
+                        if (!matchFound && msg['解析状态'] && String(msg['解析状态'].text).toLowerCase().includes(lowerCaseQuery)) {
+                            matchFound = true;
+                        }
+                        // 检查原始POST数据
+                        if (!matchFound && msg['raw_post_data_json'] && String(msg['raw_post_data_json']).toLowerCase().includes(lowerCaseQuery)) {
+                            matchFound = true;
+                        }
+                    }
+
+                    if (matchFound) {
+                        filteredMessages.push(msg);
+                    }
+                });
+            }
+
+            historyMessagesContainer.innerHTML = '';
+            if (filteredMessages.length === 0) {
+                noHistorySearchResultsDiv.style.display = 'block';
+            } else {
+                noHistorySearchResultsDiv.style.display = 'none';
+                filteredMessages.forEach(msg => {
+                    // 调用 base.html 中定义的通用函数
+                    const cardHtml = createMessageCardHtml(
+                        msg['IdNumber'],      // ID Number
+                        msg,                  // 消息数据对象
+                        query,                // 搜索关键词用于高亮
+                        shouldExpandCards,    // 默认展开
+                        true                  // 标记为历史视图
+                    );
+                    historyMessagesContainer.innerHTML += cardHtml;
+                });
+                bindCardToggleEvents(); // 重新绑定卡片折叠事件
+            }
+        }
+
+        // 监听搜索框输入
+        historySearchQueryInput.addEventListener('input', renderHistoryMessages);
+
+        // 页面加载完成时执行
         document.addEventListener('DOMContentLoaded', () => {
-            // 在历史页面，默认所有卡片都是展开的，所以初始图标是旋转的
-            // 使用 base.html 中的通用绑定函数
-            bindCardToggleEvents();
+            // 如果有初始搜索关键词，填充搜索框
+            if (initialQuery) {
+                historySearchQueryInput.value = initialQuery;
+            }
+            // 首次渲染历史消息
+            renderHistoryMessages();
         });
     </script>
 {% endblock %}

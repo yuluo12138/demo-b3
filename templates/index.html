@@ -10,7 +10,7 @@
     <div class="search-controls">
         <div>
             <label for="searchQuery">内容搜索</label>
-            <input type="text" id="searchQuery" placeholder="输入 ID、定位时间、经纬度、自定义数据等...">
+            <input type="text" id="searchQuery" placeholder="输入 ID、定位时间、经纬度、自定义数据、原始POST数据等...">
         </div>
         <div>
             <label>接收时间范围</label>
@@ -47,43 +47,19 @@
     </div>
 
     <script>
-        // 调试步骤 1: 确认 JavaScript 文件加载并开始执行
-        console.log('--- Frontend Debugging Start: Script Loaded ---');
-        document.getElementById('jsError').style.display = 'none'; // 隐藏 JS 错误提示
+        console.log('--- Frontend Debugging Start: Script Loaded (index.html) ---');
+        document.getElementById('jsError').style.display = 'none';
 
-        let allData = {};
-        let sortedIdNumbersArray = [];
+        // 接收所有 ID 的所有消息 (已在后端格式化)
+        // 结构: { "ID1": [formatted_msg1, formatted_msg2, ...], "ID2": [...] }
+        const allMessagesGroupedById = {{ all_messages_grouped_by_id | tojson }};
+        const sortedIdNumbersArray = {{ sorted_id_numbers_js_arr | tojson }};
 
-        // 预先生成历史页面基础 URL，以便 JavaScript 拼接 ID
-        const historyBaseUrl = "{{ url_for('history', id_number_param='') }}";
+        console.log('Received allMessagesGroupedById (JavaScript object from Flask): ', allMessagesGroupedById);
+        console.log('Received sortedIdNumbersArray:', sortedIdNumbersArray);
 
-        // 定义表格的列和对应的键，仅包含核心的定位信息
-        const TABLE_COLUMNS = [
-            { header: '定位时间', key: '定位时间', class: 'col-locate-time' },
-            { header: '纬度', key: '纬度', class: 'col-coords' },
-            { header: '经度', key: '经度', class: 'col-coords' },
-            { header: '高程', key: '高程', class: 'col-altitude' },
-            { header: '自定义数据', key: '自定义数据', class: 'col-custom-data' }
-        ];
-
-        try {
-            // 使用 Jinja2 的 tojson 过滤器直接将 Python 对象转换为 JS 对象字面量
-            allData = {{ all_messages_grouped_js_obj | tojson }};
-            sortedIdNumbersArray = {{ sorted_id_numbers_js_arr | tojson }};
-
-            console.log('Received allData (JavaScript object from Flask): ', allData);
-            console.log('Number of IDs in allData (after direct assignment): ', Object.keys(allData).length);
-            console.log('Received sortedIdNumbersArray:', sortedIdNumbersArray);
-
-            if (Object.keys(allData).length > 0) {
-                document.getElementById('initialNoData').style.display = 'none';
-            }
-
-        } catch (e) {
-            console.error('Error receiving or assigning data from Flask:', e);
-            document.getElementById('jsError').style.display = 'block'; // 显示 JS 错误提示
-            allData = {};
-            sortedIdNumbersArray = [];
+        if (Object.keys(allMessagesGroupedById).length > 0) {
+            document.getElementById('initialNoData').style.display = 'none';
         }
         
         const messagesContainer = document.getElementById('messagesContainer');
@@ -95,204 +71,171 @@
         const displayedIdCountSpan = document.getElementById('displayedIdCount');
         const displayedMessageCountSpan = document.getElementById('displayedMessageCount');
 
-        function createMessageCardHtml(idNumber, msg, totalCount, isHistoryView, highlightQuery) {
-            let cardHtml = '';
-            const isLatestMessage = !isHistoryView; // 主页模式下，msg就是latest_message
+        // 辅助函数：判断消息是否匹配搜索查询
+        function messageMatchesQuery(msg, query) {
+            if (!query) return true; // 无查询时，所有消息都匹配
 
-            // 卡片标题：始终显示 ID, 接收时间, 消息ID
-            const headerText = `ID: <span class="card-title-text">${highlightText(idNumber, highlightQuery)}</span> - ` + 
-                               `接收时间: <span class="card-title-text">${highlightText(msg['接收时间'], highlightQuery)}</span> - ` +
-                               `消息ID: <span class="card-title-text">${highlightText(msg['MessageId'], highlightQuery)}</span>`;
-            
-            const countText = totalCount > 0 ? ` (共 ${totalCount} 条)` : '';
-            
-            const historyFullLink = `${historyBaseUrl}${encodeURIComponent(idNumber)}`;
-            const historyLinkHtml = `<a href="${historyFullLink}" class="button secondary" style="margin-left: 10px;">查看历史</a>`;
+            const lowerCaseQuery = query.toLowerCase();
 
-            // 获取解析状态文本和类
-            const parseStatusText = msg['解析状态'] ? msg['解析状态'].text : 'N/A';
-            const parseStatusClass = msg['解析状态'] ? msg['解析状态'].class : '';
-            
-            // 获取数据标识
-            const dataId = msg['数据标识'] || 'N/A';
+            // 检查 ID Number
+            if (String(msg['IdNumber']).toLowerCase().includes(lowerCaseQuery)) return true;
+            // 检查 MessageId
+            if (String(msg['MessageId']).toLowerCase().includes(lowerCaseQuery)) return true;
+            // 检查接收时间
+            if (String(msg['接收时间']).toLowerCase().includes(lowerCaseQuery)) return true;
+            // 检查数据标识
+            if (String(msg['数据标识']).toLowerCase().includes(lowerCaseQuery)) return true;
+            // 检查解析状态文本
+            if (msg['解析状态'] && String(msg['解析状态'].text).toLowerCase().includes(lowerCaseQuery)) return true;
+            // 检查表格列内容
+            for (const col of TABLE_COLUMNS) {
+                const value = String(msg[col.key]);
+                if (value.toLowerCase().includes(lowerCaseQuery)) return true;
+            }
+            // 检查原始POST数据
+            if (msg['raw_post_data_json'] && String(msg['raw_post_data_json']).toLowerCase().includes(lowerCaseQuery)) return true;
 
-            cardHtml += `
-                <div class="card id-card-yellow" data-id="${idNumber}">
-                    <div class="card-header">
-                        <div>${headerText}${countText}</div>
-                        <div>
-                            ${isLatestMessage ? historyLinkHtml : ''}
-                            <span class="card-toggle-icon">▶</span>
-                        </div>
-                    </div>
-                    <div class="card-content">
-                        <div class="message-meta">
-                            <div class="item">数据标识: <span>${highlightText(dataId, highlightQuery)}</span></div>
-                            <div class="item">解析状态: <span class="${parseStatusClass}">${highlightText(parseStatusText, highlightQuery)}</span></div>
-                        </div>
-                        <table>
-                            <thead>
-                                <tr>
-            `;
-            // 表头
-            TABLE_COLUMNS.forEach(col => {
-                cardHtml += `<th class="${col.class}">${escapeHtml(col.header)}</th>`;
-            });
+            return false;
+        }
 
-            cardHtml += `
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-            `;
-            // 数据行
-            TABLE_COLUMNS.forEach(col => {
-                let displayedValue;
-                let valueClass = col.class; // 单元格基础类名
-                let rawValue = msg[col.key];
+        // 辅助函数：判断消息是否匹配日期范围
+        function messageMatchesDateRange(msg, startDateStr, endDateStr) {
+            if (!startDateStr && !endDateStr) return true; // 无日期范围时，所有消息都匹配
 
-                if (col.key === '自定义数据' && String(rawValue).length > 50) { 
-                    const shortValue = String(rawValue).substring(0, 50) + '...';
-                    displayedValue = `
-                        <details style="display: block;">
-                            <summary>${highlightText(shortValue, highlightQuery)}</summary>
-                            <pre class="code-block" style="max-height: 100px;">${highlightText(String(rawValue), highlightQuery)}</pre>
-                        </details>
-                    `;
-                } else {
-                    displayedValue = highlightText(String(rawValue || 'N/A'), highlightQuery);
+            const receiveTime = msg['接收时间'];
+            if (!receiveTime) return false;
+
+            try {
+                // 只取日期部分进行比较
+                const messageDate = new Date(receiveTime.split('T')[0]); 
+                if (isNaN(messageDate.getTime())) {
+                    return false;
                 }
+
+                const start = startDateStr ? new Date(startDateStr) : null;
+                const end = endDateStr ? new Date(endDateStr) : null;
                 
-                cardHtml += `<td class="${valueClass}">${displayedValue}</td>`;
-            });
-            
-            cardHtml += `
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-            return cardHtml;
+                if (start && messageDate < start) {
+                    return false;
+                }
+                if (end && messageDate > end) {
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                console.error("日期解析错误:", e, "Receive Time:", receiveTime);
+                return false;
+            }
         }
 
         function renderMessages() {
-            console.log('--- renderMessages called ---');
-            const query = searchQueryInput.value.trim().toLowerCase();
+            console.log('--- renderMessages called (index.html) ---');
+            const query = searchQueryInput.value.trim(); 
+            const lowerCaseQuery = query.toLowerCase();
             const startDateStr = startDateInput.value;
             const endDateStr = endDateInput.value;
             
-            let filteredGroups = [];
-            let totalFilteredMessages = 0;
+            // 判断是否处于搜索模式
+            const isSearching = !!query || !!startDateStr || !!endDateStr; 
+            
+            let totalFilteredMessagesCount = 0; // 实际显示的卡片数量
             let displayedIdNumbers = new Set(); 
+            let htmlOutput = '';
 
-            if (Object.keys(allData).length === 0) {
+            // 如果没有数据，显示无数据或无搜索结果信息
+            if (Object.keys(allMessagesGroupedById).length === 0) {
                 messagesContainer.innerHTML = '';
                 displayedIdCountSpan.textContent = 0;
                 displayedMessageCountSpan.textContent = 0;
-                if (!query && !startDateStr && !endDateStr) {
+                if (!isSearching) { // 没有搜索条件，且没有数据
                     initialNoDataDiv.style.display = 'block';
                     noSearchResultsDiv.style.display = 'none';
-                    console.log('allData is empty and no search query, showing initialNoData message.');
-                } else {
+                } else { // 有搜索条件，但没有数据
                     initialNoDataDiv.style.display = 'none';
                     noSearchResultsDiv.style.display = 'block';
-                    console.log('allData is empty but search query present, showing noSearchResults message.');
                 }
                 return;
             } else {
                 initialNoDataDiv.style.display = 'none';
             }
 
+            // 遍历所有 ID
             for (const idNumber of sortedIdNumbersArray) { 
-                const group = allData[idNumber];
-                if (!group || !group.latest_message) continue;
+                const messagesForId = allMessagesGroupedById[idNumber];
+                if (!messagesForId || messagesForId.length === 0) continue;
 
-                const latestMsg = group.latest_message;
+                let messagesHtmlForCurrentIdGroup = ''; // 用于当前 ID 分组内的消息卡片
+                let idGroupHasMatchedMessages = false;
 
-                // 日期范围过滤
-                let passDateFilter = true;
-                if (startDateStr || endDateStr) {
-                    const receiveTime = latestMsg['接收时间'];
-                    if (receiveTime) {
-                        try {
-                            const messageDate = new Date(receiveTime.split('T')[0]); 
-                            if (isNaN(messageDate.getTime())) {
-                                console.warn(`Invalid date format for receiveTime: ${receiveTime}`);
-                                passDateFilter = false;
-                            } else {
-                                const start = startDateStr ? new Date(startDateStr) : null;
-                                const end = endDateStr ? new Date(endDateStr) : null;
-                                
-                                if (start && messageDate < start) {
-                                    passDateFilter = false;
-                                }
-                                if (end && messageDate > end) {
-                                    passDateFilter = false;
-                                }
-                            }
-                        } catch (e) {
-                            console.error("日期解析错误:", e, "Receive Time:", receiveTime);
-                            passDateFilter = false;
+                if (isSearching) {
+                    // 搜索模式：遍历该 ID 下的所有历史消息
+                    for (const msg of messagesForId) {
+                        if (messageMatchesDateRange(msg, startDateStr, endDateStr) && messageMatchesQuery(msg, lowerCaseQuery)) {
+                            messagesHtmlForCurrentIdGroup += createMessageCardHtml(
+                                idNumber, 
+                                msg, 
+                                query,          // 传递原始query用于高亮
+                                true,           // 搜索模式下，卡片默认展开
+                                false           // isHistoryView: false (主页)
+                            );
+                            idGroupHasMatchedMessages = true;
+                            totalFilteredMessagesCount++;
                         }
-                    } else {
-                        passDateFilter = false;
                     }
-                }
-
-                if (!passDateFilter) continue;
-
-                // 模糊搜索过滤
-                let passQueryFilter = false;
-                if (!query) {
-                    passQueryFilter = true;
                 } else {
-                    if (String(idNumber).toLowerCase().includes(query)) {
-                        passQueryFilter = true;
-                    } else {
-                        for (const key in latestMsg) {
-                            if (latestMsg.hasOwnProperty(key)) {
-                                let valueToSearch;
-                                if (key === '解析状态' && typeof latestMsg[key] === 'object' && latestMsg[key] !== null && 'text' in latestMsg[key]) {
-                                    valueToSearch = latestMsg[key].text;
-                                } else {
-                                    valueToSearch = String(latestMsg[key]);
-                                }
-
-                                if (valueToSearch.toLowerCase().includes(query)) {
-                                    passQueryFilter = true;
-                                    break;
-                                }
-                            }
-                        }
+                    // 非搜索模式：只显示最新一条消息
+                    const latestMsg = messagesForId[0]; // 消息已按时间倒序排列，第一个就是最新
+                    if (latestMsg) {
+                        messagesHtmlForCurrentIdGroup += createMessageCardHtml(
+                            idNumber, 
+                            latestMsg, 
+                            query,          // 即使没有搜索，也要传递query给highlightText，它会处理空query
+                            false,          // 非搜索模式下，卡片默认折叠
+                            false           // isHistoryView: false (主页)
+                        );
+                        idGroupHasMatchedMessages = true;
+                        totalFilteredMessagesCount++;
                     }
                 }
-                
-                if (passQueryFilter) {
-                    filteredGroups.push({ id: idNumber, data: group });
+
+                // 如果该 ID 下有匹配的消息（或非搜索模式下的最新消息），则添加 ID 分组
+                if (idGroupHasMatchedMessages) {
                     displayedIdNumbers.add(idNumber);
-                    totalFilteredMessages += group.total_count;
+
+                    // ID 分组的头部，包含 ID 和该 ID 下的消息总数（整个历史总数）
+                    const idGroupHeader = `
+                        <div class="id-group-header">
+                            <div>ID: <span class="id-text">${highlightText(idNumber, query)}</span> (共 ${messagesForId.length} 条)</div>
+                            <span class="id-group-toggle-icon ${isSearching ? '' : 'rotated'}">▼</span>
+                        </div>
+                    `;
+                    // ID 分组的内容区域，根据是否搜索来决定默认是展开还是折叠
+                    const idGroupContentClass = `id-group-content ${isSearching ? '' : 'collapsed'}`;
+
+                    htmlOutput += `
+                        <div class="id-group">
+                            ${idGroupHeader}
+                            <div class="${idGroupContentClass}">
+                                ${messagesHtmlForCurrentIdGroup}
+                            </div>
+                        </div>
+                    `;
                 }
             }
 
-            messagesContainer.innerHTML = '';
-            if (filteredGroups.length === 0) {
+            messagesContainer.innerHTML = htmlOutput;
+
+            if (totalFilteredMessagesCount === 0) {
                 noSearchResultsDiv.style.display = 'block';
             } else {
                 noSearchResultsDiv.style.display = 'none';
-                
-                filteredGroups.forEach(group => {
-                    const cardHtml = createMessageCardHtml(group.id, group.data.latest_message, group.data.total_count, false, query);
-                    messagesContainer.innerHTML += cardHtml;
-                });
-
-                bindCardToggleEvents();
+                bindCardToggleEvents();    // 绑定消息卡片的折叠事件
+                bindIdGroupToggleEvents(); // 绑定 ID 分组的折叠事件
             }
 
             displayedIdCountSpan.textContent = displayedIdNumbers.size;
-            displayedMessageCountSpan.textContent = totalFilteredMessages;
-            console.log('--- renderMessages finished ---');
-            console.log(`Displayed IDs: ${displayedIdNumbers.size}, Total Messages: ${totalFilteredMessages}`);
+            displayedMessageCountSpan.textContent = totalFilteredMessagesCount;
+            console.log(`--- renderMessages finished --- Displayed IDs: ${displayedIdNumbers.size}, Total Messages: ${totalFilteredMessagesCount}`);
         }
 
         searchQueryInput.addEventListener('input', renderMessages);
