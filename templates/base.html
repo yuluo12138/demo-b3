@@ -267,7 +267,8 @@
             font-size: 0.95em;
         }
         .search-controls input[type="text"],
-        .search-controls input[type="date"] {
+        .search-controls input[type="date"],
+        .search-controls input[type="datetime-local"] { /* 添加 datetime-local */
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #ccc;
@@ -277,7 +278,8 @@
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
         .search-controls input[type="text"]:focus,
-        .search-controls input[type="date"]:focus {
+        .search-controls input[type="date"]:focus,
+        .search-controls input[type="datetime-local"]:focus { /* 添加 datetime-local */
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
             outline: none;

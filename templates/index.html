@@ -15,8 +15,8 @@
         <div>
             <label>接收时间范围</label>
             <div class="input-group">
-                <input type="date" id="startDate">
-                <input type="date" id="endDate">
+                <input type="datetime-local" id="startDate"> <!-- 修改为 datetime-local -->
+                <input type="datetime-local" id="endDate">   <!-- 修改为 datetime-local -->
             </div>
         </div>
     </div>
@@ -98,23 +98,27 @@
             return false;
         }
 
-        // 辅助函数：判断消息是否匹配日期范围
+        // 辅助函数：判断消息是否匹配日期时间范围
         function messageMatchesDateRange(msg, startDateStr, endDateStr) {
-            if (!startDateStr && !endDateStr) return true; // 无日期范围时，所有消息都匹配
+            if (!startDateStr && !endDateStr) return true; // 无日期时间范围时，所有消息都匹配
 
-            const receiveTime = msg['接收时间'];
+            const receiveTime = msg['接收时间']; // 例如: "2023-10-27T10:30:00"
             if (!receiveTime) return false;
 
             try {
-                // 只取日期部分进行比较
-                const messageDate = new Date(receiveTime.split('T')[0]); 
+                const messageDate = new Date(receiveTime); // 直接解析 ISO 格式
                 if (isNaN(messageDate.getTime())) {
+                    console.warn("Invalid message receive time format:", receiveTime);
                     return false;
                 }
 
+                // input type="datetime-local" 产出的格式也是 ISO 格式 (YYYY-MM-DDTHH:mm:ss)
                 const start = startDateStr ? new Date(startDateStr) : null;
                 const end = endDateStr ? new Date(endDateStr) : null;
                 
+                if (start && isNaN(start.getTime())) { console.warn("Invalid start date string:", startDateStr); start = null; }
+                if (end && isNaN(end.getTime())) { console.warn("Invalid end date string:", endDateStr); end = null; }
+
                 if (start && messageDate < start) {
                     return false;
                 }
@@ -123,7 +127,7 @@
                 }
                 return true;
             } catch (e) {
-                console.error("日期解析错误:", e, "Receive Time:", receiveTime);
+                console.error("日期时间解析错误:", e, "Receive Time:", receiveTime);
                 return false;
             }
         }
@@ -166,6 +170,7 @@
 
                 let messagesHtmlForCurrentIdGroup = ''; // 用于当前 ID 分组内的消息卡片
                 let idGroupHasMatchedMessages = false;
+                let matchedMessagesCountForCurrentId = 0; // 【新】用于记录当前ID匹配搜索的消息数量
 
                 if (isSearching) {
                     // 搜索模式：遍历该 ID 下的所有历史消息
@@ -180,6 +185,7 @@
                             );
                             idGroupHasMatchedMessages = true;
                             totalFilteredMessagesCount++; // 搜索模式下，只统计匹配的消息
+                            matchedMessagesCountForCurrentId++; // 【新】累加当前ID匹配的消息数量
                         }
                     }
                 } else {
@@ -197,16 +203,20 @@
                     }
                     // 在非搜索模式下，无论是否显示最新一条，都将当前ID的所有历史消息数量累加到总数中
                     totalFilteredMessagesCount += messagesForId.length; 
+                    // 【新】非搜索模式下，当前ID的消息数量就是所有历史消息数量
+                    matchedMessagesCountForCurrentId = messagesForId.length; 
                 }
 
                 // 如果该 ID 下有匹配的消息（或非搜索模式下的最新消息），则添加 ID 分组
                 if (idGroupHasMatchedMessages) {
                     displayedIdNumbers.add(idNumber);
 
-                    // ID 分组的头部，包含 ID 和该 ID 下的消息总数（整个历史总数）
+                    // 【修改】ID 分组的头部，现在根据是否搜索来决定显示匹配数量还是总历史数量
+                    const countToDisplayInHeader = isSearching ? matchedMessagesCountForCurrentId : messagesForId.length;
+
                     const idGroupHeader = `
                         <div class="id-group-header">
-                            <div>ID: <span class="id-text">${highlightText(idNumber, query)}</span> (共 ${messagesForId.length} 条)</div>
+                            <div>ID: <span class="id-text">${highlightText(idNumber, query)}</span> (共 ${countToDisplayInHeader} 条)</div>
                             <span class="id-group-toggle-icon ${isSearching ? '' : 'rotated'}">▼</span>
                         </div>
                     `;

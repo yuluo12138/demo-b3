@@ -352,7 +352,7 @@ def receive_post_data():
 
     id_number = data['IdNumber']
     content_hex = data['Content']
-    receive_time = datetime.datetime.now().isoformat()
+    receive_time = datetime.datetime.now().isoformat(timespec='seconds') # 精确到秒
 
     print(f"[{datetime.datetime.now()}] [INFO] API收到请求 - IdNumber: {id_number}, MessageId: {data['MessageId']}")
 

@@ -27,7 +27,7 @@
 
         // Flask 传递过来的格式化后的历史消息数据
         const historicalMessages = {{ historical_messages | tojson }};
-        // 从 URL 获取的初始搜索查询
+        // 从 URL 获取的初始搜索关键词
         const initialQuery = "{{ initial_query }}";
 
         const historySearchQueryInput = document.getElementById('historySearchQuery');
