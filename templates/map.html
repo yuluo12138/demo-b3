@@ -10,26 +10,64 @@
 
 {% block content %}
     <style>
-        /* 保留原有地图控制区样式 */
-        #map-controls {
+        /* 整体控制面板容器 */
+        #map-controls-container {
+            display: grid;
+            grid-template-columns: 1fr; /* 默认单列 */
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        /* 单个控制卡片样式 */
+        .control-card {
             background-color: #fcfcfc;
             border: 1px solid var(--border-color);
             padding: 20px;
             border-radius: 8px;
-            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        /* 响应式布局：中等屏幕以上两列 */
+        @media (min-width: 992px) {
+            #map-controls-container {
+                grid-template-columns: 2fr 1fr; /* 左侧常规查询宽，右侧实时更新窄 */
+            }
+        }
+        @media (max-width: 991px) {
+            #map-controls-container {
+                grid-template-columns: 1fr; /* 小屏幕下改为单列 */
+            }
+            .control-card:first-child { /* 常规查询卡片在小屏幕上可能需要调整布局 */
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 20px;
+                align-items: flex-end;
+            }
+            .control-card:first-child .button-wrapper {
+                grid-column: span 1;
+                justify-content: flex-start;
+            }
+        }
+        
+        /* 针对常规查询卡片内部布局 */
+        #static-query-card {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* 响应式布局 */
             gap: 20px;
             align-items: flex-end;
         }
-        #map-controls label {
+
+        #static-query-card label {
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
             color: var(--heading-color);
             font-size: 0.95em;
         }
-        #map-controls select {
+        #static-query-card select,
+        #static-query-card input[type="text"],
+        #static-query-card input[type="datetime-local"],
+        #static-query-card input[type="number"] {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #ccc;
@@ -37,12 +75,23 @@
             font-size: 1em;
             box-sizing: border-box;
             background-color: white;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
-        #map-controls select:focus {
+        #static-query-card select:focus,
+        #static-query-card input[type="text"]:focus,
+        #static-query-card input[type="datetime-local"]:focus,
+        #static-query-card input[type="number"]:focus {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
             outline: none;
+        }
+        /* 禁用时的样式 */
+        #static-query-card select:disabled,
+        #static-query-card input[type="text"]:disabled,
+        #static-query-card input[type="datetime-local"]:disabled,
+        #static-query-card input[type="number"]:disabled {
+            background-color: #e9ecef;
+            cursor: not-allowed;
         }
         /* ID选择器选中项的样式 */
         #idSelector option:checked {
@@ -51,47 +100,39 @@
             font-weight: 600;
         }
 
-        #map-controls .input-group {
+        #static-query-card .input-group {
             display: flex;
             gap: 10px;
         }
-        #map-controls .input-group input {
-            flex-grow: 1;
-            padding: 10px 12px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 1em;
-            box-sizing: border-box;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-        #map-controls .input-group input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
-            outline: none;
-        }
-        #map-controls .radio-group {
+        #static-query-card .radio-group {
             display: flex;
             gap: 20px;
             margin-top: 10px;
             align-items: center;
         }
-        #map-controls .radio-group label {
+        #static-query-card .radio-group label {
             display: flex;
             align-items: center;
             margin-bottom: 0;
             font-weight: normal;
         }
-        #map-controls .radio-group input[type="radio"] {
+        #static-query-card .radio-group input[type="radio"] {
             margin-right: 5px;
             width: auto;
         }
-        #map-controls .button-wrapper {
+        /* 禁用Radio按钮的文本颜色 */
+        #static-query-card .radio-group input[type="radio"]:disabled + label {
+            color: #999;
+            cursor: not-allowed;
+        }
+
+        #static-query-card .button-wrapper {
             grid-column: span 1; /* 占据一列 */
             display: flex;
             justify-content: flex-end; /* 按钮靠右对齐 */
             align-items: flex-end; /* 底部对齐 */
         }
-        #map-controls .button {
+        #static-query-card .button {
             width: auto; /* 按钮宽度自适应 */
         }
         #id-selector-group { /* 用于包装ID选择器和全选按钮 */
@@ -117,6 +158,97 @@
             background-color: var(--secondary-hover-color);
             transform: translateY(-1px);
         }
+        #select-all-ids-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ====== 实时更新控制卡片样式 ====== */
+        #realtime-update-card {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        #realtime-update-card h3 {
+            margin-top: 0;
+            color: var(--heading-color);
+            font-size: 1.1em;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        /* 实时更新的复选框组已移除 */
+
+        .realtime-update-interval-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .realtime-update-interval-group label {
+            font-weight: 500;
+            color: var(--heading-color);
+            margin-bottom: 0;
+        }
+        .realtime-update-interval-group input[type="number"] {
+            width: 80px; /* 控制宽度 */
+            text-align: center;
+            padding: 8px 10px;
+        }
+        .realtime-update-info {
+            font-size: 0.85em;
+            color: #666;
+        }
+        #realtimeControlButton {
+            width: 100%;
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.05em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            margin-top: 10px;
+        }
+        #realtimeControlButton:hover {
+            background-color: var(--primary-hover-color);
+            transform: translateY(-1px);
+        }
+        #realtimeControlButton:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        /* ================================== */
+
+        /* 消息提示框样式 */
+        .map-status-message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1em;
+            color: #7f8c8d;
+            background-color: #f0f3f5;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px dashed #c0c7cb;
+        }
+        .map-status-message.success {
+            border: 1px dashed var(--success-color);
+            color: var(--success-color);
+            background-color: #e6f7ed;
+        }
+        .map-status-message.error {
+            border: 1px dashed var(--error-color);
+            color: var(--error-color);
+            background-color: #fbe6e6;
+        }
+        .map-status-message.warning {
+            border: 1px dashed var(--warning-color);
+            color: var(--warning-color);
+            background-color: #fff9e6;
+        }
+
 
         /* 保留原有地图容器样式 */
         #container {
@@ -144,21 +276,13 @@
         }
 
         /* 针对小屏幕适配 */
-        @media (max-width: 992px) {
-            #map-controls {
-                grid-template-columns: 1fr; /* 小屏幕下改为单列 */
-            }
-            #map-controls .button-wrapper {
-                justify-content: flex-start; /* 按钮靠左对齐 */
+        @media (max-width: 576px) {
+            #container {
+                height: 500px; /* 更小的屏幕更小的高度 */
             }
             #map-legend {
                 left: 15px; /* 小屏幕上图例靠左显示，避免遮挡 */
                 right: auto;
-            }
-        }
-        @media (max-width: 576px) {
-            #container {
-                height: 500px; /* 更小的屏幕更小的高度 */
             }
         }
 
@@ -271,47 +395,71 @@
 
     </style>
 
-    <div id="map-controls">
-        <div id="id-selector-group">
-            <label for="idSelector">选择ID</label>
-            <select id="idSelector" multiple size="5"> {# multiple 属性允许多选，size 属性显示更多选项 #}
-                {% for id_num in sorted_id_numbers_js_arr %}
-                    <option value="{{ id_num }}">{{ id_num }}</option>
-                {% endfor %}
-            </select>
-            <button id="select-all-ids-button" type="button">全选ID</button>
-        </div>
-        <div>
-            <label>时间范围</label>
-            <div class="input-group">
-                <input type="datetime-local" id="mapStartDate">
-                <input type="datetime-local" id="mapEndDate">
+    <div id="map-controls-container">
+        {# 常规数据查询卡片 #}
+        <div id="static-query-card" class="control-card">
+            <div id="id-selector-group">
+                <label for="idSelector">选择ID</label>
+                <select id="idSelector" multiple size="5"> {# multiple 属性允许多选，size 属性显示更多选项 #}
+                    {% for id_num in sorted_id_numbers_js_arr %}
+                        <option value="{{ id_num }}">{{ id_num }}</option>
+                    {% endfor %}
+                </select>
+                <button id="select-all-ids-button" type="button">全选ID</button>
             </div>
-            <div class="radio-group">
-                <label>
-                    <input type="radio" name="displayMode" value="latest" checked> 最新位置
-                </label>
-                <label>
-                    <input type="radio" name="displayMode" value="trajectory"> 轨迹
-                </label>
+            
+            <div> {# 包含时间范围和显示模式，以便禁用时统一处理 #}
+                <div class="time-range-group">
+                    <label>时间范围</label>
+                    <div class="input-group">
+                        <input type="datetime-local" id="mapStartDate">
+                        <input type="datetime-local" id="mapEndDate">
+                    </div>
+                </div>
+                <div class="radio-group" style="margin-top: 10px;">
+                    <label>
+                        <input type="radio" name="displayMode" value="latest" checked> 最新位置
+                    </label>
+                    <label>
+                        <input type="radio" name="displayMode" value="trajectory"> 轨迹
+                    </label>
+                </div>
+            </div>
+
+            <div class="button-wrapper">
+                <button id="displayMapData" class="button">显示地图数据</button>
             </div>
         </div>
-        <div class="button-wrapper">
-            <button id="displayMapData" class="button">显示地图数据</button>
+        
+        {# 实时更新控制卡片 #}
+        <div id="realtime-update-card" class="control-card">
+            <h3>实时更新配置</h3>
+            {# 实时更新勾选框已移除 #}
+            <div class="realtime-update-interval-group">
+                <label for="refreshInterval">刷新间隔 (秒):</label>
+                <input type="number" id="refreshInterval" class="form-control" value="10" min="1">
+            </div>
+            <p class="realtime-update-info" id="realtimeInfoText">实时更新将显示**当前已选择ID**的最新位置，不依赖时间筛选。</p>
+            <button id="realtimeControlButton" class="button primary">停止实时更新</button> {# 默认显示停止按钮 #}
         </div>
     </div>
 
-    <div id="noMapDataMessage" class="no-data-message" style="display: block;">
-        请选择ID和显示模式，然后点击“显示地图数据”来查看。
+    {# 两个消息提示区域 #}
+    <div id="noMapDataMessage" class="map-status-message" style="display: none;">
+        当前筛选条件下没有找到任何有效的定位数据。
     </div>
+    <div id="realtimeStatusMessage" class="map-status-message success" style="display: none;">
+        实时更新中... (每 <span id="currentRefreshInterval">10</span> 秒刷新一次)
+    </div>
+
     <div id="container">
         <!-- 图例将在这里动态生成 -->
     </div>
 
     <script type="text/javascript">
-        // 请替换为你自己的安全密钥
+        // ！！！重要：请将此处的 securityJsCode 替换为您自己的高德JS API 安全密钥！！！
         window._AMapSecurityConfig = {
-            securityJsCode: 'a9b2d8c3e4f5g6h7i8j9k0l1m2n3o4p5', 
+            securityJsCode: '{{ amap_jsapi_key }}', // 使用后端传递的密钥
         };
     </script>
     <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key={{ amap_jsapi_key }}&plugin=AMap.MarkerClusterer"></script>
@@ -320,18 +468,33 @@
 
         const allMessagesGroupedById = {{ all_messages_grouped_by_id | tojson }};
         const sortedIdNumbersArray = {{ sorted_id_numbers_js_arr | tojson }};
+        
+        // DOM 元素获取
         const idSelector = document.getElementById('idSelector');
         const selectAllIdsButton = document.getElementById('select-all-ids-button');
         const mapStartDateInput = document.getElementById('mapStartDate');
         const mapEndDateInput = document.getElementById('mapEndDate');
         const displayModeRadios = document.querySelectorAll('input[name="displayMode"]');
-        const displayMapDataButton = document.getElementById('displayMapData');
+        const displayModeLatestRadio = document.querySelector('input[name="displayMode"][value="latest"]');
+        const displayModeTrajectoryRadio = document.querySelector('input[name="displayMode"][value="trajectory"]');
+        const displayMapDataButton = document.getElementById('displayMapData'); // 非实时模式的显示数据按钮
         const mapContainer = document.getElementById('container');
         const noMapDataMessage = document.getElementById('noMapDataMessage');
+        const realtimeStatusMessage = document.getElementById('realtimeStatusMessage');
+        const currentRefreshIntervalSpan = document.getElementById('currentRefreshInterval');
+        
+        // 实时更新相关DOM元素和变量
+        const refreshIntervalInput = document.getElementById('refreshInterval');
+        const realtimeInfoText = document.getElementById('realtimeInfoText');
+        const realtimeControlButton = document.getElementById('realtimeControlButton'); // 实时模式的控制按钮
+
+        let realtimeUpdateIntervalId = null; // 用于存储实时更新的定时器ID
+        const defaultRealtimeRefreshInterval = 10; // 默认刷新间隔秒数
+        let latestRealtimeMarkers = {}; // 存储实时更新模式下地图上显示的最新标记，键是IdNumber
 
         let map = null;
-        let markers = []; // 存储所有地图上的标记
-        let polylines = []; // 存储所有轨迹线
+        let markers = []; // 存储所有地图上的标记 (非实时更新模式下使用)
+        let polylines = []; // 存储所有轨迹线 (非实时更新模式下使用)
         let infoWindow = null; // 高德地图信息窗体
         let currentSelectedMarker = null; // 存储当前被选中的标记
 
@@ -354,6 +517,7 @@
                     const option = document.createElement('option');
                     option.value = idNum;
                     option.textContent = idNum;
+                    option.selected = true; // 默认选中所有ID
                     idSelector.appendChild(option);
                 });
                 selectAllIdsButton.disabled = false; // 有ID时启用全选按钮
@@ -438,33 +602,52 @@
             }
         }
 
-        // 核心函数：绘制地图数据
+        // 清空所有地图覆盖物（非实时更新模式）
+        function clearAllStaticMapElements() {
+            if (map) {
+                map.remove(markers);
+                map.remove(polylines);
+                markers = [];
+                polylines = [];
+                if (infoWindow && infoWindow.getIsOpen()) infoWindow.close();
+                if (currentSelectedMarker) {
+                    resetMarkerState(currentSelectedMarker);
+                    currentSelectedMarker = null;
+                }
+                console.log('Cleared all non-realtime map elements.');
+            }
+        }
+
+        // 清空实时更新模式下的标记
+        function clearRealtimeMarkers() {
+            if (map) {
+                const markersToRemove = Object.values(latestRealtimeMarkers);
+                map.remove(markersToRemove);
+                latestRealtimeMarkers = {};
+                if (infoWindow && infoWindow.getIsOpen()) infoWindow.close();
+                if (currentSelectedMarker) { // 清除旧的选中标记状态
+                    resetMarkerState(currentSelectedMarker);
+                    currentSelectedMarker = null;
+                }
+                console.log('Cleared all realtime markers.');
+            }
+        }
+
+        // 核心函数：绘制地图数据（非实时更新模式下调用）
         function renderMapData() {
             console.log('--- renderMapData called (map.html) ---');
-            if (!map) {
-                map = new AMap.Map('container', {
-                    zoom: 11,
-                    center: [116.397428, 39.90923], // 初始中心点：北京
-                    viewMode: '3D'
-                });
-                infoWindow = new AMap.InfoWindow({offset: new AMap.Pixel(0, -30)});
-
-                // 绑定地图点击事件，用于关闭信息窗体和清除选中状态
-                map.on('click', handleMapClick);
+            // 如果实时更新正在运行，阻止非实时模式的渲染
+            if (realtimeUpdateIntervalId) {
+                console.warn("Real-time update is active, cannot render static map data. Please stop real-time update first.");
+                noMapDataMessage.textContent = '实时更新正在运行中，无法显示历史数据。请先停止实时更新。';
+                noMapDataMessage.className = 'map-status-message warning';
+                noMapDataMessage.style.display = 'block';
+                return;
             }
 
             // 清除旧的覆盖物和高亮状态
-            map.remove(markers);
-            map.remove(polylines);
-            markers = [];
-            polylines = [];
-            
-            // 关闭信息窗体和清除选中状态
-            if (infoWindow && infoWindow.getIsOpen()) infoWindow.close();
-            if (currentSelectedMarker) {
-                resetMarkerState(currentSelectedMarker);
-                currentSelectedMarker = null;
-            }
+            clearAllStaticMapElements();
+            realtimeStatusMessage.style.display = 'none'; // 隐藏实时更新状态信息
 
             const selectedIds = Array.from(idSelector.selectedOptions).map(option => option.value);
             const startDateStr = mapStartDateInput.value;
@@ -473,6 +656,7 @@
 
             if (selectedIds.length === 0) {
                 noMapDataMessage.textContent = '请选择至少一个ID来显示地图数据。';
+                noMapDataMessage.className = 'map-status-message warning';
                 noMapDataMessage.style.display = 'block';
                 handleDisplayModeChange(); 
                 return;
@@ -519,7 +703,7 @@
                         // 最新位置模式下只显示最新坐标（红色图钉）
                         const marker = createCustomMarker(latestLocation.lnglat, latestLocation.message, 'latest');
                         markers.push(marker);
-                        allPointsForFitView.push(latestLocation.lnglat);
+                        allPointsForFitView.push(new AMap.LngLat(latestLocation.lnglat[0], latestLocation.lnglat[1]));
                     }
                 } else if (displayMode === 'trajectory') {
                     // 确保轨迹模式下至少有两个点才能绘制线
@@ -536,7 +720,8 @@
                             map: map
                         });
                         polylines.push(polyline);
-                        allPointsForFitView.push(...path); // 将所有轨迹点加入视野调整
+                        // 将所有轨迹点转换为 AMap.LngLat 对象并加入视野调整
+                        allPointsForFitView.push(...path.map(p => new AMap.LngLat(p[0], p[1])));
                     }
 
 
@@ -560,12 +745,18 @@
             if (allPointsForFitView.length > 0) {
                 const bounds = new AMap.Bounds();
                 allPointsForFitView.forEach(point => {
-                    bounds.extend(new AMap.LngLat(point[0], point[1]));
+                    // 确保point是AMap.LngLat对象，或者转换为它
+                    if (point instanceof AMap.LngLat) {
+                        bounds.extend(point);
+                    } else if (Array.isArray(point) && point.length === 2) { // 兼容 [lng, lat] 数组
+                        bounds.extend(new AMap.LngLat(point[0], point[1]));
+                    }
                 });
                 map.setFitView(null, false, [50, 50, 50, 50]); // 增加一些边距
                 console.log(`Map FitView adjusted to cover ${allPointsForFitView.length} points.`);
             } else {
                 noMapDataMessage.textContent = '当前筛选条件下没有找到任何有效的定位数据。';
+                noMapDataMessage.className = 'map-status-message warning';
                 noMapDataMessage.style.display = 'block';
             }
 
@@ -669,7 +860,6 @@
          */
         function handleMapClick(e) {
             // 判断点击是否发生在Marker或信息窗口内部
-            // AMap的event.targetIs=='marker'或'infoWindow'可以直接判断
             const clickedTarget = e.originalEvent.target;
             const isClickOnMarker = clickedTarget.closest('.amap-marker') !== null;
             const isClickOnInfoWindow = clickedTarget.closest('.amap-info-window') !== null;
@@ -706,7 +896,7 @@
             if (type === 'history') {
                 // 蓝色小圆点添加选中样式
                 markerDOM.classList.add('selected');
-            } else { // 'latest' (红色图钉)
+            } else { // 'latest'
                 // 红色图钉通过操作其DOM元素来添加高亮类
                 markerDOM.classList.add('red-pin-selected');
             }
@@ -729,7 +919,7 @@
             if (type === 'history') {
                 // 移除蓝色小圆点选中样式
                 markerDOM.classList.remove('selected');
-            } else { // 'latest' (红色图钉)
+            } else { // 'latest'
                 // 移除红色图钉的高亮类
                 markerDOM.classList.remove('red-pin-selected');
             }
@@ -744,7 +934,7 @@
             }
             
             let content = `
-                <div>
+                <div class="amap-info-window-content">
                     <h4>ID: ${msg['IdNumber'] || 'N/A'} <strong>（已选中）</strong></h4>
                     <div class="info-item"><strong>接收时间:</strong> ${msg['接收时间'] || 'N/A'}</div>
                     <div class="info-item"><strong>消息ID:</strong> ${msg['MessageId'] || 'N/A'}</div>
@@ -786,14 +976,23 @@
 
         // 处理显示模式切换时的图例显示逻辑
         function handleDisplayModeChange() {
-            const displayMode = document.querySelector('input[name="displayMode"]:checked').value;
-
             const legendLatestCoordinate = document.getElementById('legend-latest-coordinate');
             const legendHistoryCoordinate = document.getElementById('legend-history-coordinate');
             const legendLine = document.getElementById('legend-trajectory-line');
 
-            // 最新坐标在两种模式下都可能出现，默认显示
-            if (legendLatestCoordinate) legendLatestCoordinate.classList.remove('hidden-legend-item'); 
+            // 实时更新模式下，只显示最新坐标的图例
+            if (realtimeUpdateIntervalId) { // 判断是否处于实时更新状态
+                if (legendLatestCoordinate) legendLatestCoordinate.classList.remove('hidden-legend-item');
+                if (legendHistoryCoordinate) legendHistoryCoordinate.classList.add('hidden-legend-item');
+                if (legendLine) legendLine.classList.add('hidden-legend-item');
+                console.log('Legend display updated for Real-time mode.');
+                return;
+            }
+
+            // 非实时更新模式下，根据radio按钮状态显示图例
+            const displayMode = document.querySelector('input[name="displayMode"]:checked').value;
+
+            if (legendLatestCoordinate) legendLatestCoordinate.classList.remove('hidden-legend-item'); // 最新坐标在两种模式下都可能出现，默认显示
 
             if (displayMode === 'latest') {
                 // 最新位置模式下，隐藏历史坐标和轨迹线
@@ -807,49 +1006,284 @@
             console.log(`Legend display updated for mode: ${displayMode}`);
         }
 
-        // 绑定事件
-        displayMapDataButton.addEventListener('click', renderMapData);
+        // ===============================================
+        // ====== 实时更新功能相关函数 ======
+        // ===============================================
 
-        // 绑定显示模式切换事件
-        displayModeRadios.forEach(radio => {
-            radio.addEventListener('change', handleDisplayModeChange);
-        });
+        async function updateLatestLocationsOnMap() {
+            const selectedIds = Array.from(idSelector.selectedOptions).map(option => option.value);
 
-        // 全选按钮事件
-        selectAllIdsButton.addEventListener('click', () => {
-            Array.from(idSelector.options).forEach(option => {
-                if (!option.disabled) {
-                    option.selected = true;
+            if (selectedIds.length === 0) {
+                noMapDataMessage.textContent = '实时更新：请至少选择一个ID。';
+                noMapDataMessage.className = 'map-status-message warning';
+                noMapDataMessage.style.display = 'block';
+                realtimeStatusMessage.style.display = 'none';
+                clearRealtimeMarkers(); // 确保清空地图
+                return;
+            }
+
+            console.log("Fetching latest locations for selected IDs:", selectedIds.join(','));
+            try {
+                // 向后端API发送请求，包含选中的ID
+                // ！！！重要：后端 /api/latest_locations 必须支持 id_numbers 参数进行过滤！！！
+                // 后端应该只返回 `selectedIds` 数组中包含的ID的最新数据。
+                const response = await fetch(`/api/latest_locations?id_numbers=${selectedIds.join(',')}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-            });
-            console.log('All IDs selected.');
-        });
+                const rawLatestData = await response.json(); // 获取原始数据
+                console.log("Received raw latest data:", rawLatestData);
 
-        // 初始化
+                // --- 增强前端数据过滤，确保只处理当前选中的ID ---
+                const latestData = rawLatestData.filter(data => selectedIds.includes(data.IdNumber));
+                console.log("Filtered latest data (only selected IDs):", latestData);
+                // --- 增强过滤结束 ---
+
+
+                // 清除所有当前实时标记，以避免重复和保持最新状态
+                // 在清除之前，如果 currentSelectedMarker 是即将被清除的实时标记之一，则将其重置
+                if (currentSelectedMarker && Object.values(latestRealtimeMarkers).includes(currentSelectedMarker)) {
+                    resetMarkerState(currentSelectedMarker);
+                    currentSelectedMarker = null;
+                }
+                map.remove(Object.values(latestRealtimeMarkers));
+                latestRealtimeMarkers = {}; // 重置
+
+                let allPointsForFitView = []; // 存储所有有效的 AMap.LngLat 对象
+
+                if (latestData.length === 0) {
+                    noMapDataMessage.textContent = '实时更新：所选ID暂无数据。';
+                    noMapDataMessage.className = 'map-status-message warning';
+                    noMapDataMessage.style.display = 'block';
+                    realtimeStatusMessage.style.display = 'none';
+                    return;
+                } else {
+                    noMapDataMessage.style.display = 'none';
+                    realtimeStatusMessage.style.display = 'block';
+                }
+
+                latestData.forEach(data => {
+                    const idNum = data.IdNumber;
+                    const lat = data.decimal_latitude;
+                    const lng = data.decimal_longitude;
+
+                    if (lat !== null && lng !== null) {
+                        const newPosition = new AMap.LngLat(lng, lat);
+                        
+                        const marker = createCustomMarker([lng, lat], data, 'latest'); // createCustomMarker 接受 [lng, lat] 数组
+                        latestRealtimeMarkers[idNum] = marker; // 存储新标记
+                        map.add(marker); // 添加到地图
+                        allPointsForFitView.push(newPosition); // 加入视野调整，这里使用 AMap.LngLat 对象
+                    }
+                });
+                
+                // 根据选择的ID数量调整地图视野
+                if (allPointsForFitView.length > 0) {
+                    // 检查是否只有一个ID被选中，且数据中只有一个有效点
+                    // 理论上实时更新模式下，一个ID只会返回一个最新点。
+                    // 此时 `selectedIds.length` 和 `allPointsForFitView.length` 都应该为 1。
+                    if (selectedIds.length === 1 && allPointsForFitView.length === 1) {
+                        const singlePoint = allPointsForFitView[0]; // 这是一个 AMap.LngLat 对象
+                        map.setCenter(singlePoint);
+                        map.setZoom(16); // 设定一个合适的放大级别，例如16
+                        console.log(`Map centered and zoomed to single selected ID: ${selectedIds[0]} at zoom 16.`);
+                    } else {
+                        // 否则，自适应视野以显示所有点（多个ID，或单个ID但意外返回多个点）
+                        const bounds = new AMap.Bounds();
+                        allPointsForFitView.forEach(point => {
+                            bounds.extend(point); // allPointsForFitView 存储的是 AMap.LngLat 对象，直接 extend
+                        });
+                        map.setFitView(null, false, [50, 50, 50, 50]); // 增加一些边距
+                        console.log(`Map FitView adjusted to cover ${allPointsForFitView.length} points.`);
+                    }
+                }
+
+            } catch (error) {
+                console.error("Error fetching latest locations:", error);
+                noMapDataMessage.textContent = `实时更新失败：${error.message || '网络错误'}`;
+                noMapDataMessage.className = 'map-status-message error';
+                noMapDataMessage.style.display = 'block';
+                realtimeStatusMessage.style.display = 'none';
+                stopRealtimeUpdate(); // 停止实时更新
+            }
+        }
+
+        function startRealtimeUpdate() {
+            stopRealtimeUpdate(); // 先清除任何现有定时器
+
+            let interval = parseInt(refreshIntervalInput.value);
+            if (isNaN(interval) || interval < 1) {
+                interval = defaultRealtimeRefreshInterval;
+                refreshIntervalInput.value = defaultRealtimeRefreshInterval;
+            }
+            currentRefreshIntervalSpan.textContent = interval; // 更新显示的间隔
+
+            console.log(`Starting real-time update with interval: ${interval} seconds`);
+            
+            clearAllStaticMapElements(); // 清空静态数据
+            // clearRealtimeMarkers(); // 确保也清空之前的实时标记 (在 updateLatestLocationsOnMap 内部处理)
+
+            // 禁用常规查询控制项
+            setStaticQueryControlsEnabled(false); 
+            // 立即执行一次更新
+            updateLatestLocationsOnMap(); 
+            // 设置定时器
+            realtimeUpdateIntervalId = setInterval(updateLatestLocationsOnMap, interval * 1000);
+
+            realtimeStatusMessage.style.display = 'block';
+            noMapDataMessage.style.display = 'none';
+            realtimeControlButton.textContent = '停止实时更新';
+            realtimeControlButton.classList.remove('secondary'); 
+            realtimeControlButton.classList.add('primary'); // 默认按钮样式
+            handleDisplayModeChange(); // 更新图例显示
+        }
+
+        function stopRealtimeUpdate() {
+            if (realtimeUpdateIntervalId) {
+                clearInterval(realtimeUpdateIntervalId);
+                realtimeUpdateIntervalId = null;
+                console.log("Stopped real-time update.");
+                clearRealtimeMarkers(); // 停止实时更新时，清空实时模式下的标记
+            }
+            setStaticQueryControlsEnabled(true); // 恢复常规查询控制项
+            realtimeStatusMessage.style.display = 'none';
+            noMapDataMessage.textContent = '实时更新已停止。请选择ID和时间范围，然后点击“显示地图数据”来查看历史数据。';
+            noMapDataMessage.className = 'map-status-message'; // 恢复默认样式
+            noMapDataMessage.style.display = 'block';
+            realtimeControlButton.textContent = '开始实时更新';
+            realtimeControlButton.classList.remove('primary');
+            realtimeControlButton.classList.add('secondary'); // 可以设置为次要按钮样式
+            handleDisplayModeChange(); // 更新图例显示
+        }
+
+        /**
+         * 启用/禁用常规查询控制项 (ID选择器始终可用)
+         * @param {boolean} enable - true为启用，false为禁用
+         */
+        function setStaticQueryControlsEnabled(enable) {
+            // ID选择器和全选按钮始终可用
+            // mapStartDateInput.disabled = !enable;
+            // mapEndDateInput.disabled = !enable;
+            // displayModeRadios.forEach(radio => radio.disabled = !enable);
+            // displayMapDataButton.disabled = !enable;
+
+            // 禁用/启用时间范围输入
+            mapStartDateInput.disabled = !enable;
+            mapEndDateInput.disabled = !enable;
+
+            // 禁用/启用显示模式单选框
+            displayModeRadios.forEach(radio => radio.disabled = !enable);
+            if (!enable) {
+                // 如果禁用，强制选中最新位置，并禁用轨迹选项
+                displayModeLatestRadio.checked = true; // 强制选中最新位置
+                displayModeTrajectoryRadio.disabled = true; // 禁用轨迹选项
+                displayModeTrajectoryRadio.parentNode.style.opacity = '0.5'; // 禁用样式
+                displayModeTrajectoryRadio.parentNode.style.cursor = 'not-allowed';
+            } else {
+                displayModeTrajectoryRadio.disabled = false; // 启用轨迹选项
+                displayModeTrajectoryRadio.parentNode.style.opacity = '1'; // 恢复样式
+                displayModeTrajectoryRadio.parentNode.style.cursor = 'pointer';
+            }
+            
+            // 禁用/启用显示地图数据按钮
+            displayMapDataButton.disabled = !enable; // 非实时模式的按钮，仅在非实时模式下可用
+            
+            console.log(`Static query controls ${enable ? 'enabled' : 'disabled'}.`);
+        }
+
+        // ===============================================
+        // ====== 页面初始化逻辑 ======
+        // ===============================================
         document.addEventListener('DOMContentLoaded', () => {
             initializeIdSelector();
             createMapLegend(); // 在DOM加载完成后创建图例
             
-            // ================== 默认显示所有ID的最新坐标信息 ==================
-            if (sortedIdNumbersArray.length > 0) {
-                // 1. 选中所有ID
+            // 初始化地图，但不立即加载数据
+            map = new AMap.Map('container', {
+                zoom: 11,
+                center: [116.397428, 39.90923], // 初始中心点：北京
+                viewMode: '3D'
+            });
+            infoWindow = new AMap.InfoWindow({offset: new AMap.Pixel(0, -30)});
+            map.on('click', handleMapClick);
+
+            // 设置默认时间为最近24小时 (如果用户停止实时更新后，切换到历史查询会用到)
+            const now = new Date();
+            const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            mapStartDateInput.value = twentyFourHoursAgo.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+            mapEndDateInput.value = now.toISOString().slice(0, 16);
+
+            // ====== 绑定事件监听器 ======
+            // 非实时模式的“显示地图数据”按钮事件
+            displayMapDataButton.addEventListener('click', renderMapData);
+
+            // 绑定显示模式切换事件 (非实时模式下)
+            displayModeRadios.forEach(radio => {
+                radio.addEventListener('change', handleDisplayModeChange);
+            });
+
+            // 全选按钮事件
+            selectAllIdsButton.addEventListener('click', () => {
                 Array.from(idSelector.options).forEach(option => {
-                    if (!option.disabled) {
+                    if (!option.disabled) { // 确保只选择可用的选项
                         option.selected = true;
                     }
                 });
-                // 2. 确保“最新位置”被选中
-                document.querySelector('input[name="displayMode"][value="latest"]').checked = true;
-                // 3. 触发地图数据渲染
-                renderMapData();
-                console.log('Default: Displaying latest coordinates for all IDs.');
+                console.log('All IDs selected.');
+                // 如果实时更新正在运行，并且用户全选ID，也应该触发一次更新
+                if (realtimeUpdateIntervalId) {
+                    updateLatestLocationsOnMap();
+                }
+            });
+            
+            // 实时控制按钮事件（开始/停止实时更新）
+            realtimeControlButton.addEventListener('click', function() {
+                if (realtimeUpdateIntervalId) { // 如果正在运行，则停止
+                    stopRealtimeUpdate();
+                } else { // 如果没有运行，则开始
+                    startRealtimeUpdate();
+                }
+            });
+
+            // 刷新间隔输入框事件
+            refreshIntervalInput.addEventListener('change', function() {
+                if (realtimeUpdateIntervalId) { // 如果实时更新正在运行，调整间隔后重新启动定时器
+                    startRealtimeUpdate(); 
+                }
+            });
+            refreshIntervalInput.value = parseInt(refreshIntervalInput.value) || defaultRealtimeRefreshInterval;
+            refreshIntervalInput.min = "1"; // 确保最小值为1秒
+
+
+            // 页面加载后的默认行为：
+            if (sortedIdNumbersArray.length > 0) {
+                // 1. initializeIdSelector 已经默认选中所有ID
+                // 2. 确保“最新位置”被选中 (在实时模式下，它会自动固定)
+                displayModeLatestRadio.checked = true;
+                // 3. 默认启动实时更新
+                startRealtimeUpdate(); 
+                console.log('Default: Starting real-time update for all IDs.');
             } else {
                 noMapDataMessage.textContent = '暂无ID数据可显示，请稍后重试。';
+                noMapDataMessage.className = 'map-status-message warning';
                 noMapDataMessage.style.display = 'block';
                 // 即使没有数据，也应该初始化图例状态
                 handleDisplayModeChange();
+                // 如果没有ID，所有操作都应禁用
+                setStaticQueryControlsEnabled(false); 
+                selectAllIdsButton.disabled = true;
+                refreshIntervalInput.disabled = true;
+                realtimeControlButton.disabled = true;
+                realtimeControlButton.textContent = '无ID数据';
             }
-            // ============================================================================
+
+            // 当ID选择器选择发生变化时，如果实时更新正在运行，重新加载数据
+            idSelector.addEventListener('change', () => {
+                if (realtimeUpdateIntervalId) {
+                    console.log('ID selection changed during real-time update, refreshing map data...');
+                    updateLatestLocationsOnMap();
+                }
+            });
         });
 
     </script>

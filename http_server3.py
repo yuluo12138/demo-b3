@@ -3,9 +3,9 @@ import datetime
 import uuid
 import os
 import re
-import math
+import math # math 模块在您提供的代码中没有直接用到，但保留以防后续扩展
 from flask import Flask, request, jsonify, render_template, abort, url_for
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus # 同上，保留以防后续扩展
 from collections import defaultdict
 import binascii
 
@@ -240,8 +240,16 @@ def convert_dmm_to_decimal(dmm_str, hemisphere):
         return None
     try:
         parts = dmm_str.split('.')
-        degrees = int(parts[0][:-2]) # 提取度
-        minutes = float(parts[0][-2:] + '.' + parts[1]) # 提取分和秒
+        
+        # 根据字符串长度判断是 ddmm 还是 dddmm
+        if len(parts[0]) == 4: # ddmm.mmmmm
+            degrees = int(parts[0][:2])
+            minutes = float(parts[0][2:] + '.' + parts[1])
+        elif len(parts[0]) == 5: # dddmm.mmmmm
+            degrees = int(parts[0][:3])
+            minutes = float(parts[0][3:] + '.' + parts[1])
+        else:
+            return None # 格式不匹配
         
         decimal_deg = degrees + minutes / 60
         
@@ -260,9 +268,11 @@ def format_coords(hemisphere, value_str):
         return f"{hemisphere if isinstance(hemisphere, str) else ''}{value_str if isinstance(value_str, str) else ''} (格式错误或缺失)"
 
     try:
+        # 兼容 ddmm.mmmmm 和 dddmm.mmmmm 两种格式
         match = re.match(r'^(\d+)(\d{2}\.\d{5})$', value_str)
         if not match:
-            return f"{hemisphere}{value_str} (格式不符ddmm.mmmmm或dddmm.mmmmm)"
+             # 如果原始格式不是标准的ddmm.mmmmm或dddmm.mmmmm，直接显示原始值
+            return f"{hemisphere}{value_str} (格式不符)"
 
         degree_str = match.group(1)
         minute_str = match.group(2)
@@ -322,12 +332,9 @@ def format_parsed_data_for_display(parsed_data, raw_post_data, receive_time):
     formatted['decimal_latitude'] = None # 用于地图，默认None
     formatted['decimal_longitude'] = None # 用于地图，默认None
 
-
+    # 如果存在解析错误，则仅显示原始/错误信息
     if parsed_data.get('parse_status_class') == 'error-text':
-        # 错误状态下，直接使用解析器返回的原始/错误信息
-        # 纬度经度高程保持N/A
         formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A') # 自定义数据可能在解析错误时仍然存在
-        # 添加原始POST数据，方便前端搜索
         formatted['raw_post_data_json'] = json.dumps(raw_post_data, indent=2, ensure_ascii=False)
         return formatted
 
@@ -406,6 +413,47 @@ def receive_post_data():
 
     response_payload["Code"] = "ok"
     return jsonify(response_payload), 200
+
+# 修正后的 API 接口：获取所有 ID 的最新位置数据
+# 此函数现在负责处理 `id_numbers` 参数进行过滤
+@app.route('/api/latest_locations', methods=['GET'])
+def api_latest_locations():
+    selected_ids_str = request.args.get('id_numbers') # 获取传递的ID字符串
+    if selected_ids_str:
+        selected_ids = [s.strip() for s in selected_ids_str.split(',') if s.strip()]
+    else:
+        # 如果没有指定ID，则返回 DATA_STORE 中所有ID的最新数据
+        # 此时selected_ids列表为空，下面的循环会遍历所有ID
+        selected_ids = list(DATA_STORE.keys()) 
+
+    latest_data_for_response = []
+
+    for id_num in selected_ids: # 遍历所有**需要查询**的ID
+        if id_num in DATA_STORE and DATA_STORE[id_num]:
+            # DATA_STORE中每个ID的消息列表已按接收时间倒序排列，第一个就是最新的
+            latest_msg_entry = DATA_STORE[id_num][0] 
+            
+            # 使用 format_parsed_data_for_display 进行格式化和经纬度转换
+            formatted_msg = format_parsed_data_for_display(
+                latest_msg_entry.get('parsed_content', {}),
+                latest_msg_entry.get('raw_post_data', {}),
+                latest_msg_entry.get('receive_time', None)
+            )
+
+            # 只返回需要用于地图更新的关键信息
+            if formatted_msg['decimal_latitude'] is not None and formatted_msg['decimal_longitude'] is not None:
+                latest_data_for_response.append({
+                    'IdNumber': formatted_msg['IdNumber'],
+                    'decimal_latitude': formatted_msg['decimal_latitude'],
+                    'decimal_longitude': formatted_msg['decimal_longitude'],
+                    '接收时间': formatted_msg['接收时间'], # 前端需要这个字段来排序或显示
+                    '定位时间': formatted_msg['定位时间'],
+                    '自定义数据': formatted_msg['自定义数据']
+                })
+    
+    print(f"[{datetime.datetime.now()}] [INFO] 准备返回 {len(latest_data_for_response)} 条最新位置数据 (过滤ID: {', '.join(selected_ids) if selected_ids else '所有ID'})。")
+    return jsonify(latest_data_for_response)
+
 
 # --- Web 路由 ---
 @app.route('/')
