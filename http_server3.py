@@ -15,6 +15,10 @@ app = Flask(__name__)
 DATA_FILE = 'data_store.json'
 DATA_STORE = {} # 存储原始的 message_entry: {raw_post_data, parsed_content, receive_time}
 
+# 高德地图JS API Key
+AMAP_JSAPI_KEY = '9374c8276711715a3e4a6b5180e8ca63'
+
+
 # --- 数据持久化辅助函数 ---
 def load_data():
     """从文件中加载数据到 DATA_STORE"""
@@ -228,6 +232,25 @@ def parse_hex_content(hex_str):
 
     return parsed_data
 
+def convert_dmm_to_decimal(dmm_str, hemisphere):
+    """
+    将 ddmm.mmmmm 或 dddmm.mmmmm 格式转换为十进制。
+    """
+    if not isinstance(dmm_str, str) or not re.match(r'^\d+\.\d+$', dmm_str):
+        return None
+    try:
+        parts = dmm_str.split('.')
+        degrees = int(parts[0][:-2]) # 提取度
+        minutes = float(parts[0][-2:] + '.' + parts[1]) # 提取分和秒
+        
+        decimal_deg = degrees + minutes / 60
+        
+        if hemisphere in ['S', 'W']:
+            decimal_deg = -decimal_deg
+        return round(decimal_deg, 6) # 保留6位小数
+    except Exception:
+        return None
+
 def format_coords(hemisphere, value_str):
     """
     格式化经纬度，并处理无效值。
@@ -274,6 +297,7 @@ def format_parsed_data_for_display(parsed_data, raw_post_data, receive_time):
     """
     将解析后的数据格式化为更友好的显示格式。
     注意：此函数现在直接返回一个扁平化的字典，包含所有用于显示和搜索的字段。
+    同时增加十进制经纬度字段，方便地图使用。
     """
     formatted = {}
 
@@ -295,6 +319,9 @@ def format_parsed_data_for_display(parsed_data, raw_post_data, receive_time):
     formatted['经度'] = 'N/A'
     formatted['高程'] = 'N/A'
     formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A')
+    formatted['decimal_latitude'] = None # 用于地图，默认None
+    formatted['decimal_longitude'] = None # 用于地图，默认None
+
 
     if parsed_data.get('parse_status_class') == 'error-text':
         # 错误状态下，直接使用解析器返回的原始/错误信息
@@ -309,11 +336,14 @@ def format_parsed_data_for_display(parsed_data, raw_post_data, receive_time):
     lat_hemi = parsed_data.get('纬度半球')
     lat_val = parsed_data.get('原始纬度值')
     formatted['纬度'] = format_coords(lat_hemi, lat_val)
+    formatted['decimal_latitude'] = convert_dmm_to_decimal(lat_val, lat_hemi)
+
 
     lon_hemi = parsed_data.get('经度半球')
     lon_val = parsed_data.get('原始经度值')
     formatted['经度'] = format_coords(lon_hemi, lon_val)
-    
+    formatted['decimal_longitude'] = convert_dmm_to_decimal(lon_val, lon_hemi)
+
     formatted['高程'] = format_altitude(parsed_data.get('高程', 'N/A'))
     formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A')
 
@@ -451,6 +481,38 @@ def history(id_number_param):
         historical_messages=historical_messages_formatted, # 传递已经格式化好的消息列表
         initial_query=query # 传递搜索关键词给前端
     )
+
+@app.route('/map')
+def map_page():
+    print(f"[{datetime.datetime.now()}] [INFO] 访问地图页面 '/map'。")
+    
+    # 与 index 路由类似，准备所有 ID 的所有消息
+    all_messages_for_frontend = {} 
+    sorted_id_numbers = sorted(DATA_STORE.keys())
+
+    for id_num in sorted_id_numbers:
+        messages_for_id = []
+        if id_num in DATA_STORE:
+            for msg_entry in DATA_STORE[id_num]:
+                formatted_msg = format_parsed_data_for_display(
+                    msg_entry.get('parsed_content', {}),
+                    msg_entry.get('raw_post_data', {}),
+                    msg_entry.get('receive_time', None)
+                )
+                messages_for_id.append(formatted_msg)
+            
+            if messages_for_id:
+                all_messages_for_frontend[id_num] = messages_for_id
+
+    final_sorted_id_numbers_with_messages = sorted(all_messages_for_frontend.keys())
+
+    return render_template(
+        'map.html',
+        amap_jsapi_key=AMAP_JSAPI_KEY,
+        all_messages_grouped_by_id=all_messages_for_frontend,
+        sorted_id_numbers_js_arr=final_sorted_id_numbers_with_messages
+    )
+
 
 @app.errorhandler(404)
 def page_not_found(e):

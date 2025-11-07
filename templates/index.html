@@ -3,7 +3,8 @@
 {% block title %}数据展示系统 - 实时搜索{% endblock %}
 {% block page_title %}数据接收概览与搜索{% endblock %}
 {% block nav_links %}
-    <!-- 主页不需要返回首页链接 -->
+    <a href="{{ url_for('index') }}">首页</a>
+    <a href="{{ url_for('map_page') }}">地图</a> {# 新增地图页面链接 #}
 {% endblock %}
 
 {% block content %}
