@@ -3,11 +3,11 @@ import datetime
 import uuid
 import os
 import re
-import math # math 模块在您提供的代码中没有直接用到，但保留以防后续扩展
-from flask import Flask, request, jsonify, render_template, abort, url_for
-from urllib.parse import quote_plus # 同上，保留以防后续扩展
-from collections import defaultdict
+import math 
 import binascii
+from flask import Flask, request, jsonify, render_template, abort, url_for
+from urllib.parse import quote_plus 
+from collections import defaultdict
 
 app = Flask(__name__)
 
@@ -263,20 +263,35 @@ def format_coords(hemisphere, value_str):
     """
     格式化经纬度，并处理无效值。
     """
-    if not isinstance(hemisphere, str) or not isinstance(value_str, str) or \
-       not re.match(r'^[0-9.]+$', value_str):
-        return f"{hemisphere if isinstance(hemisphere, str) else ''}{value_str if isinstance(value_str, str) else ''} (格式错误或缺失)"
+    # 增加对 None 或空字符串的健壮性检查
+    if not isinstance(hemisphere, str) or not hemisphere.strip():
+        hemisphere = ''
+    if not isinstance(value_str, str) or not value_str.strip():
+        value_str = ''
+
+    if not re.match(r'^[0-9.]+$', value_str):
+        # 如果原始格式不是数字，或者包含其他字符，直接显示原始值并加括号
+        return f"{hemisphere}{value_str} (格式错误或缺失)"
 
     try:
         # 兼容 ddmm.mmmmm 和 dddmm.mmmmm 两种格式
-        match = re.match(r'^(\d+)(\d{2}\.\d{5})$', value_str)
-        if not match:
-             # 如果原始格式不是标准的ddmm.mmmmm或dddmm.mmmmm，直接显示原始值
+        # 尝试匹配 ddmm.mmmmm 或 dddmm.mmmmm
+        match_ddmm = re.match(r'^(\d{2})(\d{2}\.\d{5})$', value_str)
+        match_dddmm = re.match(r'^(\d{3})(\d{2}\.\d{5})$', value_str)
+
+        degree_str = ''
+        minute_str = ''
+        
+        if match_ddmm:
+            degree_str = match_ddmm.group(1)
+            minute_str = match_ddmm.group(2)
+        elif match_dddmm:
+            degree_str = match_dddmm.group(1)
+            minute_str = match_dddmm.group(2)
+        else:
+            # 如果不匹配标准格式，直接显示原始值，避免不必要的报错
             return f"{hemisphere}{value_str} (格式不符)"
 
-        degree_str = match.group(1)
-        minute_str = match.group(2)
-        
         hemi_map = {
             'N': '北纬', 'S': '南纬',
             'E': '东经', 'W': '西经'
@@ -291,7 +306,11 @@ def format_altitude(alt_str):
     """
     格式化高程，并处理无效值。
     """
-    if not isinstance(alt_str, str) or not re.match(r'^[+-]?[0-9]{1,5}\.[0-9]$', alt_str):
+    # 增加对 None 或空字符串的健壮性检查
+    if not isinstance(alt_str, str) or not alt_str.strip():
+        return "N/A" # 或者直接返回空字符串，取决于前端需求
+
+    if not re.match(r'^[+-]?[0-9]{1,5}\.[0-9]$', alt_str):
         return f"{alt_str} (格式错误或缺失)"
     try:
         value = float(alt_str)
@@ -306,7 +325,7 @@ def format_altitude(alt_str):
 def format_parsed_data_for_display(parsed_data, raw_post_data, receive_time):
     """
     将解析后的数据格式化为更友好的显示格式。
-    注意：此函数现在直接返回一个扁平化的字典，包含所有用于显示和搜索的字段。
+    此函数现在直接返回一个扁平化的字典，包含所有用于显示和搜索的字段。
     同时增加十进制经纬度字段，方便地图使用。
     """
     formatted = {}
@@ -322,39 +341,31 @@ def format_parsed_data_for_display(parsed_data, raw_post_data, receive_time):
         'class': parsed_data.get('parse_status_class', '')
     }
 
-    # 总是包含这些字段，即使在错误情况下也提供 N/A
+    # 总是包含这些字段，用于展示原始信息，即使解析失败也应有回退值
     formatted['数据标识'] = parsed_data.get('数据标识', 'N/A')
-    formatted['定位时间'] = parsed_data.get('定位时间', 'N/A')
-    formatted['纬度'] = 'N/A'
-    formatted['经度'] = 'N/A'
-    formatted['高程'] = 'N/A'
+    formatted['定位时间'] = parsed_data.get('定位时间', 'N/A') # 原始格式时间
+    formatted['纬度'] = parsed_data.get('原始纬度值', 'N/A') # 原始纬度字符串
+    formatted['经度'] = parsed_data.get('原始经度值', 'N/A') # 原始经度字符串
+    formatted['高程'] = parsed_data.get('高程', 'N/A') # 原始高程字符串
     formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A')
     formatted['decimal_latitude'] = None # 用于地图，默认None
     formatted['decimal_longitude'] = None # 用于地图，默认None
 
-    # 如果存在解析错误，则仅显示原始/错误信息
-    if parsed_data.get('parse_status_class') == 'error-text':
-        formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A') # 自定义数据可能在解析错误时仍然存在
-        formatted['raw_post_data_json'] = json.dumps(raw_post_data, indent=2, ensure_ascii=False)
-        return formatted
-
-
-    # 解析成功或有警告时，格式化字段
+    # 进行详细的经纬度高程解析和格式化
     lat_hemi = parsed_data.get('纬度半球')
-    lat_val = parsed_data.get('原始纬度值')
-    formatted['纬度'] = format_coords(lat_hemi, lat_val)
-    formatted['decimal_latitude'] = convert_dmm_to_decimal(lat_val, lat_hemi)
+    lat_val_raw = parsed_data.get('原始纬度值')
+    formatted['纬度'] = format_coords(lat_hemi, lat_val_raw) # 格式化后的原始纬度
+    formatted['decimal_latitude'] = convert_dmm_to_decimal(lat_val_raw, lat_hemi)
 
 
     lon_hemi = parsed_data.get('经度半球')
-    lon_val = parsed_data.get('原始经度值')
-    formatted['经度'] = format_coords(lon_hemi, lon_val)
-    formatted['decimal_longitude'] = convert_dmm_to_decimal(lon_val, lon_hemi)
+    lon_val_raw = parsed_data.get('原始经度值')
+    formatted['经度'] = format_coords(lon_hemi, lon_val_raw) # 格式化后的原始经度
+    formatted['decimal_longitude'] = convert_dmm_to_decimal(lon_val_raw, lon_hemi)
 
-    formatted['高程'] = format_altitude(parsed_data.get('高程', 'N/A'))
-    formatted['自定义数据'] = parsed_data.get('自定义数据', 'N/A')
+    formatted['高程'] = format_altitude(parsed_data.get('高程', 'N/A')) # 格式化后的高程
 
-    # 添加原始POST数据，方便前端搜索
+    # 添加原始POST数据，方便前端搜索和调试
     formatted['raw_post_data_json'] = json.dumps(raw_post_data, indent=2, ensure_ascii=False)
 
     return formatted
@@ -414,8 +425,7 @@ def receive_post_data():
     response_payload["Code"] = "ok"
     return jsonify(response_payload), 200
 
-# 修正后的 API 接口：获取所有 ID 的最新位置数据
-# 此函数现在负责处理 `id_numbers` 参数进行过滤
+# 修正后的 API 接口：获取所有 ID 的最新有效位置数据
 @app.route('/api/latest_locations', methods=['GET'])
 def api_latest_locations():
     selected_ids_str = request.args.get('id_numbers') # 获取传递的ID字符串
@@ -423,35 +433,51 @@ def api_latest_locations():
         selected_ids = [s.strip() for s in selected_ids_str.split(',') if s.strip()]
     else:
         # 如果没有指定ID，则返回 DATA_STORE 中所有ID的最新数据
-        # 此时selected_ids列表为空，下面的循环会遍历所有ID
         selected_ids = list(DATA_STORE.keys()) 
 
     latest_data_for_response = []
 
     for id_num in selected_ids: # 遍历所有**需要查询**的ID
-        if id_num in DATA_STORE and DATA_STORE[id_num]:
-            # DATA_STORE中每个ID的消息列表已按接收时间倒序排列，第一个就是最新的
-            latest_msg_entry = DATA_STORE[id_num][0] 
-            
-            # 使用 format_parsed_data_for_display 进行格式化和经纬度转换
-            formatted_msg = format_parsed_data_for_display(
-                latest_msg_entry.get('parsed_content', {}),
-                latest_msg_entry.get('raw_post_data', {}),
-                latest_msg_entry.get('receive_time', None)
+        messages_for_id = DATA_STORE.get(id_num, [])
+        
+        latest_valid_message_entry = None
+        # DATA_STORE中每个ID的消息列表已按接收时间倒序排列，可以直接遍历
+        for msg_entry in messages_for_id:
+            # 暂时格式化消息以检查经纬度有效性
+            formatted_msg_temp = format_parsed_data_for_display(
+                msg_entry.get('parsed_content', {}),
+                msg_entry.get('raw_post_data', {}),
+                msg_entry.get('receive_time', None)
             )
-
-            # 只返回需要用于地图更新的关键信息
-            if formatted_msg['decimal_latitude'] is not None and formatted_msg['decimal_longitude'] is not None:
-                latest_data_for_response.append({
-                    'IdNumber': formatted_msg['IdNumber'],
-                    'decimal_latitude': formatted_msg['decimal_latitude'],
-                    'decimal_longitude': formatted_msg['decimal_longitude'],
-                    '接收时间': formatted_msg['接收时间'], # 前端需要这个字段来排序或显示
-                    '定位时间': formatted_msg['定位时间'],
-                    '自定义数据': formatted_msg['自定义数据']
-                })
+            
+            # 检查 decimal_latitude 和 decimal_longitude 是否有效
+            if (formatted_msg_temp['decimal_latitude'] is not None and 
+                formatted_msg_temp['decimal_longitude'] is not None):
+                latest_valid_message_entry = msg_entry
+                break # 找到第一个有效消息，停止查找
+        
+        if latest_valid_message_entry:
+            # 使用找到的最新有效消息条目进行最终格式化，并包含所有需要显示的信息
+            formatted_final_msg = format_parsed_data_for_display(
+                latest_valid_message_entry.get('parsed_content', {}),
+                latest_valid_message_entry.get('raw_post_data', {}),
+                latest_valid_message_entry.get('receive_time', None)
+            )
+            latest_data_for_response.append({
+                'IdNumber': formatted_final_msg['IdNumber'],
+                'MessageId': formatted_final_msg['MessageId'],
+                '接收时间': formatted_final_msg['接收时间'],
+                '定位时间': formatted_final_msg['定位时间'],
+                '纬度': formatted_final_msg['纬度'], # 格式化后的原始纬度
+                '经度': formatted_final_msg['经度'], # 格式化后的原始经度
+                '高程': formatted_final_msg['高程'],
+                'decimal_latitude': formatted_final_msg['decimal_latitude'], # 十进制纬度
+                'decimal_longitude': formatted_final_msg['decimal_longitude'], # 十进制经度
+                '自定义数据': formatted_final_msg['自定义数据'],
+                # 可以根据需要添加更多字段
+            })
     
-    print(f"[{datetime.datetime.now()}] [INFO] 准备返回 {len(latest_data_for_response)} 条最新位置数据 (过滤ID: {', '.join(selected_ids) if selected_ids else '所有ID'})。")
+    print(f"[{datetime.datetime.now()}] [INFO] 准备返回 {len(latest_data_for_response)} 条最新有效位置数据 (过滤ID: {', '.join(selected_ids) if selected_ids else '所有ID'})。")
     return jsonify(latest_data_for_response)
 
 

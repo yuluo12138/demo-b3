@@ -439,7 +439,7 @@
                 <label for="refreshInterval">刷新间隔 (秒):</label>
                 <input type="number" id="refreshInterval" class="form-control" value="10" min="1">
             </div>
-            <p class="realtime-update-info" id="realtimeInfoText">实时更新将显示**当前已选择ID**的最新位置，不依赖时间筛选。</p>
+            <p class="realtime-update-info" id="realtimeInfoText">实时更新将显示**当前已选择ID**的最新有效位置。</p>
             <button id="realtimeControlButton" class="button primary">停止实时更新</button> {# 默认显示停止按钮 #}
         </div>
     </div>
@@ -933,16 +933,36 @@
                 return;
             }
             
+            // 优化显示信息，优先显示有效数据，否则显示 'N/A'
+            const messageId = msg['MessageId'] || 'N/A';
+            const locateTime = msg['定位时间'] || 'N/A';
+            const receiveTime = msg['接收时间'] || 'N/A';
+            
+            // 增强纬度/经度显示：同时显示原始值和解析后的十进制值
+            const rawLatitude = msg['纬度'] || 'N/A';
+            const decimalLatitude = (msg['decimal_latitude'] !== null && typeof msg['decimal_latitude'] === 'number') ? msg['decimal_latitude'].toFixed(6) : 'N/A';
+            const formattedLatitude = (rawLatitude !== 'N/A' && decimalLatitude !== 'N/A') ? `${rawLatitude} (${decimalLatitude})` : (rawLatitude !== 'N/A' ? rawLatitude : decimalLatitude);
+
+
+            const rawLongitude = msg['经度'] || 'N/A';
+            const decimalLongitude = (msg['decimal_longitude'] !== null && typeof msg['decimal_longitude'] === 'number') ? msg['decimal_longitude'].toFixed(6) : 'N/A';
+            const formattedLongitude = (rawLongitude !== 'N/A' && decimalLongitude !== 'N/A') ? `${rawLongitude} (${decimalLongitude})` : (rawLongitude !== 'N/A' ? rawLongitude : decimalLongitude);
+
+
+            const altitude = msg['高程'] || 'N/A';
+            const customData = msg['自定义数据'] ? (msg['自定义数据'].length > 50 ? msg['自定义数据'].substring(0, 50) + '...' : msg['自定义数据']) : 'N/A';
+
+
             let content = `
                 <div class="amap-info-window-content">
                     <h4>ID: ${msg['IdNumber'] || 'N/A'} <strong>（已选中）</strong></h4>
-                    <div class="info-item"><strong>接收时间:</strong> ${msg['接收时间'] || 'N/A'}</div>
-                    <div class="info-item"><strong>消息ID:</strong> ${msg['MessageId'] || 'N/A'}</div>
-                    <div class="info-item"><strong>定位时间:</strong> ${msg['定位时间'] || 'N/A'}</div>
-                    <div class="info-item"><strong>纬度:</strong> ${msg['纬度'] || 'N/A'} (${msg['decimal_latitude'] !== null && typeof msg['decimal_latitude'] === 'number' ? msg['decimal_latitude'].toFixed(6) : 'N/A'})</div>
-                    <div class="info-item"><strong>经度:</strong> ${msg['经度'] || 'N/A'} (${msg['decimal_longitude'] !== null && typeof msg['decimal_longitude'] === 'number' ? msg['decimal_longitude'].toFixed(6) : 'N/A'})</div>
-                    <div class="info-item"><strong>高程:</strong> ${msg['高程'] || 'N/A'}</div>
-                    <div class="info-item"><strong>自定义数据:</strong> ${msg['自定义数据'] ? msg['自定义数据'].substring(0, 50) + (msg['自定义数据'].length > 50 ? '...' : '') : 'N/A'}</div>
+                    <div class="info-item"><strong>接收时间:</strong> ${receiveTime}</div>
+                    <div class="info-item"><strong>消息ID:</strong> ${messageId}</div>
+                    <div class="info-item"><strong>定位时间:</strong> ${locateTime}</div>
+                    <div class="info-item"><strong>纬度:</strong> ${formattedLatitude}</div>
+                    <div class="info-item"><strong>经度:</strong> ${formattedLongitude}</div>
+                    <div class="info-item"><strong>高程:</strong> ${altitude}</div>
+                    <div class="info-item"><strong>自定义数据:</strong> ${customData}</div>
                     <p><a href="{{ url_for('history', id_number_param='') }}${encodeURIComponent(msg['IdNumber'] || '')}" target="_blank" class="button secondary" style="padding: 5px 10px; font-size: 0.85em; margin-top: 10px;">查看该ID所有历史消息</a></p>
                 </div>
             `;
@@ -1013,6 +1033,12 @@
         async function updateLatestLocationsOnMap() {
             const selectedIds = Array.from(idSelector.selectedOptions).map(option => option.value);
 
+            // 清除上次的警告或成功消息，等待本次更新结果
+            noMapDataMessage.style.display = 'none';
+            realtimeStatusMessage.className = 'map-status-message success'; // 假设成功
+            realtimeStatusMessage.style.display = 'block';
+
+
             if (selectedIds.length === 0) {
                 noMapDataMessage.textContent = '实时更新：请至少选择一个ID。';
                 noMapDataMessage.className = 'map-status-message warning';
@@ -1024,9 +1050,11 @@
 
             console.log("Fetching latest locations for selected IDs:", selectedIds.join(','));
             try {
-                // 向后端API发送请求，包含选中的ID
-                // ！！！重要：后端 /api/latest_locations 必须支持 id_numbers 参数进行过滤！！！
-                // 后端应该只返回 `selectedIds` 数组中包含的ID的最新数据。
+                // ！！！重要！！！ 后端 /api/latest_locations 接口的预期行为：
+                // 1. 接收 `id_numbers` 参数，只返回这些 ID 的数据。
+                // 2. 对于每个 ID，按接收时间倒序查找，返回【第一个】`decimal_latitude` 和 `decimal_longitude` 都【不为 null】的消息。
+                // 3. 如果某个 ID 的所有消息都没有有效定位数据，则后端应在响应中【不包含】该 ID 的数据。
+                //    或者，如果包含，则其 `decimal_latitude` 和 `decimal_longitude` 必须为 `null`。
                 const response = await fetch(`/api/latest_locations?id_numbers=${selectedIds.join(',')}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -1034,14 +1062,16 @@
                 const rawLatestData = await response.json(); // 获取原始数据
                 console.log("Received raw latest data:", rawLatestData);
 
-                // --- 增强前端数据过滤，确保只处理当前选中的ID ---
-                const latestData = rawLatestData.filter(data => selectedIds.includes(data.IdNumber));
-                console.log("Filtered latest data (only selected IDs):", latestData);
-                // --- 增强过滤结束 ---
-
+                // 筛选并验证数据：确保只处理当前选中的ID，且经纬度有效
+                // 前端再次过滤，以防后端未能完全按照预期过滤或返回不完整数据。
+                const validLatestData = rawLatestData.filter(data => 
+                    selectedIds.includes(data.IdNumber) &&
+                    data.decimal_latitude !== null && typeof data.decimal_latitude === 'number' &&
+                    data.decimal_longitude !== null && typeof data.decimal_longitude === 'number'
+                );
+                console.log("Filtered and validated latest data for map display:", validLatestData);
 
                 // 清除所有当前实时标记，以避免重复和保持最新状态
-                // 在清除之前，如果 currentSelectedMarker 是即将被清除的实时标记之一，则将其重置
                 if (currentSelectedMarker && Object.values(latestRealtimeMarkers).includes(currentSelectedMarker)) {
                     resetMarkerState(currentSelectedMarker);
                     currentSelectedMarker = null;
@@ -1051,22 +1081,23 @@
 
                 let allPointsForFitView = []; // 存储所有有效的 AMap.LngLat 对象
 
-                if (latestData.length === 0) {
-                    noMapDataMessage.textContent = '实时更新：所选ID暂无数据。';
+                if (validLatestData.length === 0) {
+                    // 如果所有选中的ID都没有返回有效数据
+                    noMapDataMessage.textContent = '实时更新：所选ID暂无有效的定位数据。';
                     noMapDataMessage.className = 'map-status-message warning';
                     noMapDataMessage.style.display = 'block';
-                    realtimeStatusMessage.style.display = 'none';
-                    return;
+                    realtimeStatusMessage.style.display = 'none'; // 隐藏实时更新状态
                 } else {
                     noMapDataMessage.style.display = 'none';
-                    realtimeStatusMessage.style.display = 'block';
+                    realtimeStatusMessage.style.display = 'block'; // 显示实时更新状态
                 }
 
-                latestData.forEach(data => {
+                validLatestData.forEach(data => {
                     const idNum = data.IdNumber;
                     const lat = data.decimal_latitude;
                     const lng = data.decimal_longitude;
 
+                    // 再次确认经纬度有效性，以防万一
                     if (lat !== null && lng !== null) {
                         const newPosition = new AMap.LngLat(lng, lat);
                         
@@ -1080,13 +1111,13 @@
                 // 根据选择的ID数量调整地图视野
                 if (allPointsForFitView.length > 0) {
                     // 检查是否只有一个ID被选中，且数据中只有一个有效点
-                    // 理论上实时更新模式下，一个ID只会返回一个最新点。
+                    // 理论上实时更新模式下，一个ID只会返回一个最新成功解析的点。
                     // 此时 `selectedIds.length` 和 `allPointsForFitView.length` 都应该为 1。
-                    if (selectedIds.length === 1 && allPointsForFitView.length === 1) {
+                    if (allPointsForFitView.length === 1) { // 即使选择了多个ID，如果只有一个ID返回有效数据，也只聚焦这个点
                         const singlePoint = allPointsForFitView[0]; // 这是一个 AMap.LngLat 对象
                         map.setCenter(singlePoint);
                         map.setZoom(16); // 设定一个合适的放大级别，例如16
-                        console.log(`Map centered and zoomed to single selected ID: ${selectedIds[0]} at zoom 16.`);
+                        console.log(`Map centered and zoomed to single point at zoom 16.`);
                     } else {
                         // 否则，自适应视野以显示所有点（多个ID，或单个ID但意外返回多个点）
                         const bounds = new AMap.Bounds();
@@ -1131,7 +1162,7 @@
             realtimeUpdateIntervalId = setInterval(updateLatestLocationsOnMap, interval * 1000);
 
             realtimeStatusMessage.style.display = 'block';
-            noMapDataMessage.style.display = 'none';
+            // noMapDataMessage.style.display = 'none'; // 交给 updateLatestLocationsOnMap 管理
             realtimeControlButton.textContent = '停止实时更新';
             realtimeControlButton.classList.remove('secondary'); 
             realtimeControlButton.classList.add('primary'); // 默认按钮样式

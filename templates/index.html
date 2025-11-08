@@ -3,6 +3,7 @@
 {% block title %}数据展示系统 - 实时搜索{% endblock %}
 {% block page_title %}数据接收概览与搜索{% endblock %}
 {% block nav_links %}
+    {# 这里的导航链接与base.html中的默认值相同，您可以选择移除此block以使用base.html的默认链接 #}
     <a href="{{ url_for('index') }}">首页</a>
     <a href="{{ url_for('map_page') }}">地图</a> {# 新增地图页面链接 #}
 {% endblock %}
@@ -89,7 +90,8 @@
             // 检查解析状态文本
             if (msg['解析状态'] && String(msg['解析状态'].text).toLowerCase().includes(lowerCaseQuery)) return true;
             // 检查表格列内容
-            for (const col of TABLE_COLUMNS) {
+            // 注意: TABLE_COLUMNS 是在 base.html 的 script 标签中定义的，因此在这里是可用的。
+            for (const col of TABLE_COLUMNS) { 
                 const value = String(msg[col.key]);
                 if (value.toLowerCase().includes(lowerCaseQuery)) return true;
             }
@@ -140,7 +142,7 @@
             const startDateStr = startDateInput.value;
             const endDateStr = endDateInput.value;
             
-            // 判断是否处于搜索模式
+            // 判断是否处于搜索模式 (只要有搜索框内容或日期时间范围，即视为搜索模式)
             const isSearching = !!query || !!startDateStr || !!endDateStr; 
             
             let totalFilteredMessagesCount = 0; // 实际显示的卡片数量 (搜索模式下为匹配数，非搜索模式下为所有历史总数)
@@ -155,16 +157,16 @@
                 if (!isSearching) { // 没有搜索条件，且没有数据
                     initialNoDataDiv.style.display = 'block';
                     noSearchResultsDiv.style.display = 'none';
-                } else { // 有搜索条件，但没有数据
+                } else { // 有搜索条件，但没有数据 (例如，用户在空数据时尝试搜索)
                     initialNoDataDiv.style.display = 'none';
                     noSearchResultsDiv.style.display = 'block';
                 }
                 return;
             } else {
-                initialNoDataDiv.style.display = 'none';
+                initialNoDataDiv.style.display = 'none'; // 有数据时，隐藏“目前没有接收到任何数据”
             }
 
-            // 遍历所有 ID
+            // 遍历所有 ID (使用后端提供的已排序的 ID 数组)
             for (const idNumber of sortedIdNumbersArray) { 
                 const messagesForId = allMessagesGroupedById[idNumber];
                 if (!messagesForId || messagesForId.length === 0) continue;
@@ -215,10 +217,12 @@
                     // 【修改】ID 分组的头部，现在根据是否搜索来决定显示匹配数量还是总历史数量
                     const countToDisplayInHeader = isSearching ? matchedMessagesCountForCurrentId : messagesForId.length;
 
+                    // ID 分组的折叠图标，搜索模式下默认展开（箭头朝下），非搜索模式下默认折叠（箭头朝左）
+                    const idGroupToggleIconClass = `id-group-toggle-icon ${isSearching ? '' : 'rotated'}`;
                     const idGroupHeader = `
                         <div class="id-group-header">
                             <div>ID: <span class="id-text">${highlightText(idNumber, query)}</span> (共 ${countToDisplayInHeader} 条)</div>
-                            <span class="id-group-toggle-icon ${isSearching ? '' : 'rotated'}">▼</span>
+                            <span class="${idGroupToggleIconClass}">▼</span>
                         </div>
                     `;
                     // ID 分组的内容区域，根据是否搜索来决定默认是展开还是折叠
@@ -242,6 +246,8 @@
                 noSearchResultsDiv.style.display = 'block';
             } else {
                 noSearchResultsDiv.style.display = 'none';
+                // 确保在内容渲染后绑定事件
+                // bindCardToggleEvents 和 bindIdGroupToggleEvents 在 base.html 的 script 中，这里直接调用即可
                 bindCardToggleEvents();    // 绑定消息卡片的折叠事件
                 bindIdGroupToggleEvents(); // 绑定 ID 分组的折叠事件
             }
@@ -251,10 +257,12 @@
             console.log(`--- renderMessages finished --- Displayed IDs: ${displayedIdNumbers.size}, Total Messages: ${totalFilteredMessagesCount}`);
         }
 
+        // 绑定搜索和日期时间过滤器的事件
         searchQueryInput.addEventListener('input', renderMessages);
         startDateInput.addEventListener('change', renderMessages);
         endDateInput.addEventListener('change', renderMessages);
 
+        // 页面加载完成后立即渲染一次消息
         document.addEventListener('DOMContentLoaded', renderMessages);
         
     </script>
