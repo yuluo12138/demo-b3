@@ -570,8 +570,9 @@
             return color;
         }
 
-        // 辅助函数：判断消息是否匹配日期时间范围 (保留原有函数)
+        // 辅助函数：判断消息是否匹配日期时间范围
         function messageMatchesDateRange(msg, startDateStr, endDateStr) {
+            // 如果开始和结束日期字符串都为空，则匹配所有时间
             if (!startDateStr && !endDateStr) return true;
 
             const receiveTime = msg['接收时间'];
@@ -710,7 +711,7 @@
                     if (validLocationsForId.length > 1) {
                         const path = validLocationsForId.map(loc => loc.lnglat);
                         // 轨迹线固定颜色为灰色
-                        const trajectoryColor = '#e77777';
+                        const trajectoryColor = '#e77777'; 
 
                         const polyline = new AMap.Polyline({
                             path: path,
@@ -1239,11 +1240,9 @@
             infoWindow = new AMap.InfoWindow({offset: new AMap.Pixel(0, -30)});
             map.on('click', handleMapClick);
 
-            // 设置默认时间为最近24小时 (如果用户停止实时更新后，切换到历史查询会用到)
-            const now = new Date();
-            const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-            mapStartDateInput.value = twentyFourHoursAgo.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
-            mapEndDateInput.value = now.toISOString().slice(0, 16);
+            // 移除了设置默认时间为最近24小时的代码，现在时间范围默认为空（全部时间）
+            // mapStartDateInput.value = ''; // 保持为空
+            // mapEndDateInput.value = '';   // 保持为空
 
             // ====== 绑定事件监听器 ======
             // 非实时模式的“显示地图数据”按钮事件
