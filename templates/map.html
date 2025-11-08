@@ -389,7 +389,7 @@
         #map-legend .legend-color-box .polyline-style-legend {
             height: 4px;
             width: 100%; /* 充满容器宽度 */
-            background-color: #888; /* 轨迹线颜色示例 */
+            background-color: #e77777; /* 轨迹线颜色示例 (灰色) */
             opacity: 0.6;
         }
 
@@ -556,7 +556,7 @@
             }
         }
 
-        // 生成随机颜色 (保留原有函数)
+        // 生成随机颜色 (此函数现在未被轨迹线使用，但保留以防将来扩展)
         function getRandomColor(id) {
             let hash = 0;
             for (let i = 0; i < id.length; i++) {
@@ -709,7 +709,8 @@
                     // 确保轨迹模式下至少有两个点才能绘制线
                     if (validLocationsForId.length > 1) {
                         const path = validLocationsForId.map(loc => loc.lnglat);
-                        const trajectoryColor = getRandomColor(idNumber);
+                        // 轨迹线固定颜色为灰色
+                        const trajectoryColor = '#e77777';
 
                         const polyline = new AMap.Polyline({
                             path: path,
@@ -987,7 +988,7 @@
                 </div>
                 <div class="legend-item" id="legend-trajectory-line">
                     <div class="legend-color-box"><div class="polyline-style-legend"></div></div>
-                    <span>轨迹线 (颜色随ID变化)</span>
+                    <span>轨迹线</span> {# 已修改为灰色 #}
                 </div>
             `;
             mapContainer.appendChild(legendDiv);
